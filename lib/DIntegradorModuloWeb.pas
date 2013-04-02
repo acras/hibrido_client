@@ -124,7 +124,7 @@ var
   DataIntegradorModuloWeb: TDataIntegradorModuloWeb;
 implementation
 
-uses DConfigSistema, fastString, AguardeFormUn, ComObj, DLog;
+uses fastString, AguardeFormUn, ComObj, DLog;
 
 {$R *.dfm}
 
