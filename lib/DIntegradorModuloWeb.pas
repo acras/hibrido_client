@@ -3,9 +3,9 @@ unit DIntegradorModuloWeb;
 interface
 
 uses
-  SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils,
+  SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
   DB, IdMultipartFormData, IBQuery, IbUpdateSQL, IdBaseComponent, IdComponent, IdTCPConnection,
-  IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls, DPrincipal;
+  IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls, IDataPrincipalUnit;
 
 type
   TNameTranslation = record
@@ -46,10 +46,10 @@ type
   TDataIntegradorModuloWeb = class(TDataModule)
     procedure DataModuleCreate(Sender: TObject);
   private
-    FdmPrincipal: TDataPrincipal;
-    procedure SetdmPrincipal(const Value: TDataPrincipal);
-    function getdmPrincipal: TDataPrincipal;
-    
+    FdmPrincipal: IDataPrincipal;
+    procedure SetdmPrincipal(const Value: IDataPrincipal);
+    function getdmPrincipal: IDataPrincipal;
+
     procedure addTabelaDetalheParams(valorPK: integer; params: TIdMultiPartFormDataStream;
       tabelaDetalhe: TTabelaDetalhe);
   protected
@@ -104,11 +104,12 @@ type
     function getAdditionalSaveConditions: string; virtual;
     procedure beforeUpdateRecord(id: integer); virtual;
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
+    function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
   public
     translations: TTranslationSet;
     verbose: boolean;
-    property dmPrincipal: TDataPrincipal read getdmPrincipal write SetdmPrincipal;
-    function buildRequestURL(nomeRecurso: string; params: string = ''): string;
+    property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
+    function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     function getDadosAtualizados: TClientDataset;
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean): IXMLDomDocument2;
     procedure migrateTableToRemote(where: string = '');
@@ -123,8 +124,7 @@ var
   DataIntegradorModuloWeb: TDataIntegradorModuloWeb;
 implementation
 
-uses DConfigSistema, DSistema, fastString, AguardeFormUn,
-  pafUtils, ComObj, sglConsts, DLog;
+uses DConfigSistema, fastString, AguardeFormUn, ComObj, DLog;
 
 {$R *.dfm}
 
@@ -843,18 +843,16 @@ begin
 end;
 
 procedure TDataIntegradorModuloWeb.SetdmPrincipal(
-  const Value: TDataPrincipal);
+  const Value: IDataPrincipal);
 begin
   FdmPrincipal := Value;
 end;
 
-function TDataIntegradorModuloWeb.getdmPrincipal: TDataPrincipal;
+function TDataIntegradorModuloWeb.getdmPrincipal: IDataPrincipal;
 begin
   if FdmPrincipal = nil then
   begin
-    FdmPrincipal := TDataPrincipal.Create(self);
-    FdmPrincipal.FNomeArquivoIni := DataPrincipal.FNomeArquivoIni;
-    FdmPrincipal.conectar;
+    FdmPrincipal := getNewDataPrincipal;
   end;
   result := FdmPrincipal;
 end;
@@ -867,29 +865,6 @@ end;
 class procedure TDataIntegradorModuloWeb.updateDataSets;
 begin
   //nada a atualizar
-end;
-
-function TDataIntegradorModuloWeb.buildRequestURL(nomeRecurso: string; params: string = ''): string;
-var
-  qry, qry2: TIBQuery;
-begin
-  qry := dmPrincipal.getQuery;
-  qry2 := dmPrincipal.getQuery;
-  try
-    qry.SQL.Text := 'select * from configsistema';
-    qry.Open;
-    qry2.SQL.Text := 'select * from sistema';
-    qry2.Open;
-    result := EnsureTrailingSlash(qry.fieldByName('URLMODULOWEB').AsString) +
-      'api/' + nomeRecurso + '?serial_number=' + qry2.fieldByName('NUMSERIE').AsString +
-      '&access_token=' + qry.fieldByName('ACCESSTOKEN').asString +
-      '&api_version=' + IntToStr(_API_VERSION);
-    if params <> '' then
-      result := result + '&' + params;
-  finally
-    FreeAndNil(qry);
-    FreeAndNil(qry2);
-  end;
 end;
 
 function TDataIntegradorModuloWeb.gerenciaRedirecionamentos(idLocal,
