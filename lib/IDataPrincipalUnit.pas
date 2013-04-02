@@ -18,6 +18,11 @@ IDataPrincipal = interface
 
   procedure commit(name: string); overload;                 //faz o commit de transação nomeada
 
+  procedure rollback; overload;                             //faz o rollback da transação ativa
+
+  procedure rollback(name: string); overload;               //faz o rollback da transação nomeada
+
+
   function getSQLResult(sqlText: string): variant;          //retorna o resultado de uma query
                                                             //ele pode ser de qualquer tipo
 
@@ -30,6 +35,10 @@ IDataPrincipal = interface
                                                             //em firebird por exemplo é um Commit Work
 
   function getQuery: TIBQuery;                              //retorna um TIBquery conectado na base
+  function sincronizar: boolean;                            //indica se deve-se ou não sincronizar
+                                                            //com a parte web. Útil quando queremos ter
+                                                            //clientes que sincronizam e outros que não sincronizam
+
 end;
 
 implementation
