@@ -1,0 +1,13 @@
+unit IDataPrincipalUnit;
+
+interface
+
+type
+
+interface IDataPrincipal
+
+end;
+
+implementation
+
+end.
