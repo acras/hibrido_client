@@ -20,7 +20,7 @@ type
     procedure SetonStepGetters(const Value: TStepGettersEvent);
   protected
     posterDataModules: array of TDataIntegradorModuloWebClass;
-    notifier: ISincronizacaoNotifier;
+    Fnotifier: ISincronizacaoNotifier;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
   public
     getterBlocks: TGetterBlocks;
@@ -32,6 +32,7 @@ type
     procedure getUpdatedData;
     procedure threadedGetUpdatedData;
     procedure threadedSaveAllToRemote;
+    property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
   end;
@@ -268,7 +269,7 @@ begin
       block[j].updateDataSets;
     end;
   end;
-  //FormPrincipal.buscandoDadosServidor := false;
+  notifier.unflagBuscandoDadosServidor;
 end;
 
 procedure TRunnerThreadGetters.setMainFormGettingTrue;
