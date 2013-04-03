@@ -7,30 +7,6 @@ uses
     ISincronizacaoNotifierUnit;
 
 type
-  TRunnerThreadGetters = class(TThread)
-  private
-    Fnotifier: ISincronizacaoNotifier;
-    procedure Setnotifier(const Value: ISincronizacaoNotifier);
-  public
-    property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
-  protected
-    procedure setMainFormGettingTrue;
-    procedure finishGettingProcess;
-    procedure Execute; override;
-  end;
-
-  TRunnerThreadPuters = class(TThread)
-  private
-    Fnotifier: ISincronizacaoNotifier;
-    procedure Setnotifier(const Value: ISincronizacaoNotifier);
-  public
-    property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
-  protected
-    procedure setMainFormPuttingTrue;
-    procedure finishPuttingProcess;
-    procedure Execute; override;
-  end;
-
   TStepGettersEvent = procedure(name: string; step, total: integer) of object;
   TServerToClientBlock = array of TDataIntegradorModuloWebClass;
   TGetterBlocks = array of TServerToClientBlock;
@@ -59,6 +35,38 @@ type
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
   end;
+
+  TRunnerThreadGetters = class(TThread)
+  private
+    Fnotifier: ISincronizacaoNotifier;
+    Fsincronizador: TDataSincronizadorModuloWeb;
+    procedure Setnotifier(const Value: ISincronizacaoNotifier);
+    procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
+  public
+    property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
+    property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
+  protected
+    procedure setMainFormGettingTrue;
+    procedure finishGettingProcess;
+    procedure Execute; override;
+  end;
+
+  TRunnerThreadPuters = class(TThread)
+  private
+    Fnotifier: ISincronizacaoNotifier;
+    Fsincronizador: TDataSincronizadorModuloWeb;
+    procedure Setnotifier(const Value: ISincronizacaoNotifier);
+    procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
+  public
+    property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
+    property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
+  protected
+    procedure setMainFormPuttingTrue;
+    procedure finishPuttingProcess;
+    procedure Execute; override;
+  end;
+  
+
 
 var
   DataSincronizadorModuloWeb: TDataSincronizadorModuloWeb;
@@ -106,7 +114,7 @@ begin
         DataLog.log('Erros ao dar saveAllToRemote. Erro: ' + e.Message, 'Sync');
     end;
     finally
-      FreeAndNil(dm);
+      dm := nil;
     end;
   end;
 end;
@@ -116,6 +124,7 @@ var
   t: TRunnerThreadGetters;
 begin
   t := TRunnerThreadGetters.Create(true);
+  t.sincronizador := self;
   t.notifier := notifier;
   t.Resume;
 end;
@@ -149,21 +158,8 @@ begin
       end;
     end;
   finally
-    FreeAndNil(dm);
+    dm := nil;
   end;
-
-{  //atualizar os dados no sistema
-  DataPrincipal.refreshData;
-  for i := 0 to length(getterBlocks) - 1 do
-  begin
-    block := getterBlocks[i];
-    dm.startTransaction;
-    try
-      for j := 0 to length(block) - 1 do
-
-  dsAtualizar.Refresh;
-  dmAtualizar.selecionar;
-}
 end;
 
 procedure TDataSincronizadorModuloWeb.DataModuleCreate(Sender: TObject);
@@ -205,7 +201,7 @@ begin
   Synchronize(setMainFormGettingTrue);
   CoInitializeEx(nil, 0);
   try
-    DataSincronizadorModuloWeb.getUpdatedData;
+    sincronizador.getUpdatedData;
   finally
     CoUninitialize;
     Synchronize(finishGettingProcess);
@@ -224,7 +220,7 @@ begin
   try
     CoInitializeEx(nil, 0);
     try
-      DataSincronizadorModuloWeb.saveAllToRemote;
+      sincronizador.saveAllToRemote;
     finally
       CoUninitialize;
     end;
@@ -247,6 +243,7 @@ var
   t: TRunnerThreadPuters;
 begin
   t := TRunnerThreadPuters.Create(true);
+  t.sincronizador := self;
   t.notifier := notifier;
   t.Resume;
 end;
@@ -263,9 +260,9 @@ var
   block: TServerToClientBlock;
 begin
   //DataPrincipal.refreshData;
-  for i := 0 to length(DataSincronizadorModuloWeb.getterBlocks) - 1 do
+  for i := 0 to length(sincronizador.getterBlocks) - 1 do
   begin
-    block := DataSincronizadorModuloWeb.getterBlocks[i];
+    block := sincronizador.getterBlocks[i];
     for j := 0 to length(block) - 1 do
     begin
       block[j].updateDataSets;
@@ -276,7 +273,8 @@ end;
 
 procedure TRunnerThreadGetters.setMainFormGettingTrue;
 begin
-  notifier.flagBuscandoDadosServidor;
+  if notifier <> nil then
+    notifier.flagBuscandoDadosServidor;
 end;
 
 procedure TRunnerThreadPuters.finishPuttingProcess;
@@ -299,6 +297,18 @@ procedure TRunnerThreadGetters.Setnotifier(
   const Value: ISincronizacaoNotifier);
 begin
   Fnotifier := Value;
+end;
+
+procedure TRunnerThreadPuters.Setsincronizador(
+  const Value: TDataSincronizadorModuloWeb);
+begin
+  Fsincronizador := Value;
+end;
+
+procedure TRunnerThreadGetters.Setsincronizador(
+  const Value: TDataSincronizadorModuloWeb);
+begin
+  Fsincronizador := Value;
 end;
 
 end.
