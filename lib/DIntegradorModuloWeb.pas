@@ -371,7 +371,7 @@ end;
 
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet; var salvou: boolean): IXMLDomDocument2;
 var
-  http: TIdHTTP;
+  http: TIdHTTP;       
   params: TIdMultiPartFormDataStream;
   xmlContent: string;
   doc: IXMLDomDocument2;
@@ -422,9 +422,7 @@ begin
         begin
           DataLog.log('Erro ao tentar salvar registro. Classe: ' + ClassName +
             '. Erro: ' + e.Message, 'Sync');
-          if not(verbose and (MessageDlg('Não foi possível salvar o Registro.'+#13+#10+
-            'Continuar tentando?', mtConfirmation, [mbYes, mbNo], 0) = mrYes)) then
-            break;
+          raise; //Logou, agora manda pra cima
         end;
       end;
     end;
@@ -490,7 +488,7 @@ var
 begin
   qry := dmPrincipal.getQuery;
   dmPrincipal.startTransaction;
-  try
+  try try
     DataLog.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
     qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' where (salvouRetaguarda = ' + QuotedStr('N') + ') '
       + getAdditionalSaveConditions;
@@ -504,6 +502,10 @@ begin
     end;
     dmPrincipal.commit;
     DataLog.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
+  except
+    DataLog.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
+    raise;
+  end;
   finally
     FreeAndNil(qry);
   end;
