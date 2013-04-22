@@ -5,14 +5,7 @@ interface
 uses
   SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
   DB, IdMultipartFormData, IBQuery, IbUpdateSQL, IdBaseComponent, IdComponent, IdTCPConnection,
-  IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
-  IDataPrincipalUnit
-
-  {$IFDEF VER150}
-  , fastString
-  {$ENDIF}
-
-  ;
+  IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls, IDataPrincipalUnit;
 
 type
   TNameTranslation = record
@@ -153,11 +146,7 @@ begin
 
   if trim(xmlContent) <> '' then
   begin
-    {$IFDEF VER150}
-    doc := CoDOMDocument.Create;
-    {$ELSE}
     doc := CoDOMDocument60.Create;
-    {$ENDIF}
     doc.loadXML(xmlContent);
     list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
     for i := 0 to list.length-1 do
@@ -345,11 +334,7 @@ function TDataIntegradorModuloWeb.translateFieldNameServerToPdv(
 begin
   result := translations.translateServerToPDV(node.nodeName, duasVias);
   if result = '' then
-    {$IFDEF VER150}
     result := FastReplace(node.nodeName, '-', '');
-    {$ELSE}
-    result := StringReplace(node.nodeName, '-', '', [rfReplaceAll]);
-    {$ENDIF}
 end;
 
 function TDataIntegradorModuloWeb.translateFieldNamePdvToServer(
@@ -357,11 +342,7 @@ function TDataIntegradorModuloWeb.translateFieldNamePdvToServer(
 begin
   result := translations.translatepdvToServer(node.nodeName);
   if result = '' then
-    {$IFDEF VER150}
     result := FastReplace(node.nodeName, '-', '');
-    {$ELSE}
-    result := StringReplace(node.nodeName, '-', '', [rfReplaceAll]);
-    {$ENDIF}
 end;
 
 
@@ -414,11 +395,7 @@ begin
       try
         xmlContent := http.Post(getRequestUrlForAction(true), params);
         sucesso := true;
-        {$IFDEF VER150}
         doc := CoDOMDocument.Create;
-        {$ELSE}
-        doc := CoDOMDocument60.Create;
-        {$ENDIF}
         doc.loadXML(xmlContent);
         result := doc;
         if duasVias or clientToServer then
@@ -783,22 +760,12 @@ begin
     if field.DataType in [ftFloat, ftBCD, ftFMTBCD, ftCurrency] then
     begin
       try
-        {$IFDEF VER150}
-        DecimalSeparator := '.';
-        ThousandSeparator := #0;
-        {$ELSE}
-        FormatSettings.DecimalSeparator := '.';
-        FormatSettings.ThousandSeparator := #0;
-        {$ENDIF}
-        result := field.AsString;
+      DecimalSeparator := '.';
+      ThousandSeparator := #0;
+      result := field.AsString;
       finally
-        {$IFDEF VER150}
         DecimalSeparator := ',';
         ThousandSeparator := '.';
-        {$ELSE}
-        FormatSettings.DecimalSeparator := ',';
-        FormatSettings.ThousandSeparator := '.';
-        {$ENDIF}
       end;
     end
     else if field.DataType in [ftDateTime] then
