@@ -211,9 +211,9 @@ procedure TDataIntegradorModuloWeb.updateRecord(node: IXMLDomNode; id: integer);
 begin
   beforeUpdateRecord(id);
   if duasVias then
-    dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE idRemoto = ' + IntToStr(id))
+    dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE idRemoto = ' + IntToStr(id), 3)
   else
-    dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id));
+    dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id), 3);
 end;
 
 procedure TDataIntegradorModuloWeb.updateSingletonRecord(node: IXMLDOMNode);

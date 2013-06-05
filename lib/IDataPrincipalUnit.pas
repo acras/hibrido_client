@@ -29,7 +29,7 @@ IDataPrincipal = interface
   function getSQLIntegerResult(sqlText: string): integer;   //retorna um resultado inteiro
                                                             //de uma query. Útil em queries de count e max
 
-  procedure execSQL(sqlText: string);                       //executa um comando SQL sem resultado
+  procedure execSQL(sqlText: string; retries: integer = 0);                       //executa um comando SQL sem resultado
 
   procedure refreshData;                                    //faz refresh dos dados do client
                                                             //em firebird por exemplo é um Commit Work
