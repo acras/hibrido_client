@@ -6,7 +6,7 @@ uses
   SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
   DB, IdMultipartFormData, IBQuery, IbUpdateSQL, IdBaseComponent, IdComponent, IdTCPConnection,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
-  IDataPrincipalUnit
+  IDataPrincipalUnit, IdURI
 
   {$IFDEF VER150}
   , fastString
@@ -123,6 +123,7 @@ type
     procedure migrateSingletonTableToRemote;
     procedure postRecordsToRemote;
     class procedure updateDataSets; virtual;
+    function getDefaultParams: string; virtual;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -906,6 +907,26 @@ function TDataIntegradorModuloWeb.gerenciaRedirecionamentos(idLocal,
   idRemoto: integer): boolean;
 begin
   result := false;
+end;
+
+function TDataIntegradorModuloWeb.getDefaultParams: string;
+var
+  qry: TIBQuery;
+begin
+  try
+    qry := dmPrincipal.getQuery;
+    qry.SQL.Text := 'select l.numserie from licenca l';
+    qry.Open;
+
+    Result := 'serie='+qry.FieldByName('numserie').AsString;
+
+    qry.SQL.Text := 'select ps.accesstoken from parametrosistema ps';
+    qry.Open;
+
+    Result := TIdURI.PathEncode(Result + '&access_token='+qry.FieldByName('accesstoken').AsString);
+  finally
+    FreeAndNil(qry);
+  end;
 end;
 
 end.
