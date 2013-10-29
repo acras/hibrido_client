@@ -565,6 +565,10 @@ end;
 procedure TDataIntegradorModuloWeb.migrateTableToRemote(where: string = '');
 var
   qry: TSQLQuery;
+<<<<<<< HEAD
+=======
+  upd: TUpdateSQL;
+>>>>>>> alterado componente de acesso a dados
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   node : IXMLDomNode;
@@ -935,5 +939,13 @@ begin
   result := false;
 end;
 
+<<<<<<< HEAD
+=======
+function TDataIntegradorModuloWeb.getHumanReadableName: string;
+begin
+  result := ClassName;
+end;
+
+>>>>>>> alterado componente de acesso a dados
 
 end.
