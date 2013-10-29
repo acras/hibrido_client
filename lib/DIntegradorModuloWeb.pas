@@ -4,9 +4,10 @@ interface
 
 uses
   SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
-  DB, IdMultipartFormData, IBQuery, IbUpdateSQL, IdBaseComponent, IdComponent, IdTCPConnection,
+  DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
-  IDataPrincipalUnit
+  IDataPrincipalUnit,
+  ISincronizacaoNotifierUnit, Data.SqlExpr,
 
   {$IFDEF VER150}
   , fastString
@@ -54,6 +55,7 @@ type
     procedure DataModuleCreate(Sender: TObject);
   private
     FdmPrincipal: IDataPrincipal;
+    Fnotifier: ISincronizacaoNotifier;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -112,11 +114,12 @@ type
     procedure beforeUpdateRecord(id: integer); virtual;
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
-    function maxRecords: integer; virtual; abstract;
+    function maxRecords: integer; virtual;
     function getHumanReadableName: string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
+    property notifier: ISincronizacaoNotifier read Fnotifier write Fnotifier;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     function getDadosAtualizados: TClientDataset;
@@ -147,28 +150,49 @@ var
   url, xmlContent: string;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
-  i: integer;
+  i, numRegistros: integer;
   node : IXMLDomNode;
+  keepImporting: boolean;
 begin
-  url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
-  xmlContent := getRemoteXmlContent(url);
-
-  if trim(xmlContent) <> '' then
+  keepImporting := true;
+  while keepImporting do
   begin
-    {$IFDEF VER150}
-    doc := CoDOMDocument.Create;
-    {$ELSE}
-    doc := CoDOMDocument60.Create;
-    {$ENDIF}
-    doc.loadXML(xmlContent);
-    list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
-    for i := 0 to list.length-1 do
+    url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
+    notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
+    xmlContent := getRemoteXmlContent(url);
+
+    if trim(xmlContent) <> '' then
     begin
-      node := list.item[i];
-      if node<>nil then
-        importRecord(node);
+      {$IFDEF VER150}
+      doc := CoDOMDocument.Create;
+      {$ELSE}
+      doc := CoDOMDocument60.Create;
+      {$ENDIF}
+      doc.loadXML(xmlContent);
+      list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
+      numRegistros := list.length;
+      notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
+      for i := 0 to numRegistros-1 do
+      begin
+        notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
+          '/' + IntToStr(numRegistros));
+        node := list.item[i];
+        if node<>nil then
+          importRecord(node);
+      end;
     end;
+    keepImporting := (maxRecords > 0) and (numRegistros >= maxRecords);
   end;
+end;
+
+function TDataIntegradorModuloWeb.getHumanReadableName: string;
+begin
+  result := ClassName;
+end;
+
+function TDataIntegradorModuloWeb.maxRecords: integer;
+begin
+  result := 0;
 end;
 
 procedure TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode);
@@ -469,7 +493,7 @@ end;
 procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer; params: TIdMultiPartFormDataStream;
   tabelaDetalhe: TTabelaDetalhe);
 var
-  qry: TIBQuery;
+  qry: TSQLQuery;
   i: integer;
 begin
   qry := dmPrincipal.getQuery;
@@ -477,7 +501,8 @@ begin
     qry.SQL.Text := 'SELECT * FROM ' + tabelaDetalhe.nomeTabela + ' where ' + tabelaDetalhe.nomeFK +
       ' = ' + IntToStr(valorPK);
     qry.Open;
-    qry.FetchAll;
+    //TODO: Migração XE
+    //qry.FetchAll;
     while not qry.Eof do
     begin
       addTranslatedParams(qry, params, tabelaDetalhe.translations, tabelaDetalhe.nomeParametro);
@@ -492,7 +517,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.migrateSingletonTableToRemote;
 var
-  qry: TIBQuery;
+  qry: TSQLQuery;
   salvou: boolean;
 begin
   qry := dmPrincipal.getQuery;
@@ -508,7 +533,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.postRecordsToRemote;
 var
-  qry: TIBQuery;
+  qry: TSQLQuery;
   salvou: boolean;
 begin
   qry := dmPrincipal.getQuery;
@@ -519,7 +544,8 @@ begin
       + getAdditionalSaveConditions;
     qry.Open;
     qry.First;
-    qry.FetchAll;
+    //TODO: Migração XE
+    //qry.FetchAll;
     while not qry.Eof do
     begin
       saveRecordToRemote(qry, salvou);
@@ -538,8 +564,8 @@ end;
 
 procedure TDataIntegradorModuloWeb.migrateTableToRemote(where: string = '');
 var
-  qry: TIBQuery;
-  upd: TIBUpdateSQL;
+  qry: TSQLQuery;
+  upd: TUpdateSQL;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   node : IXMLDomNode;
@@ -547,11 +573,12 @@ var
   salvou: boolean;
   log: TextFile;
 begin
-  offset := dmPrincipal.getSQLIntegerResult('SELECT max(' + nomePKLocal + ' + 1) from ' +
+//TODO: Migração XE (Será que precisa?)
+{  offset := dmPrincipal.getSQLIntegerResult('SELECT max(' + nomePKLocal + ' + 1) from ' +
     nomeTabela + ' ');
   qry := dmPrincipal.getQuery;
-  upd := TIBUpdateSQL.Create(nil);
-  upd.RefreshSQL.Text := 'SELECT * from ' + nomeTabela + ' where ' + nomePKLocal + ' = :' + nomePKLocal;
+  upd := TUpdateSQL.Create(nil);
+  upd.ModifySQL.Text := 'SELECT * from ' + nomeTabela + ' where ' + nomePKLocal + ' = :' + nomePKLocal;
   qry.UpdateObject := upd;
   dmPrincipal.startTransaction;
   try
@@ -562,7 +589,6 @@ begin
     AguardeForm.total := qry.RecordCount;
     AguardeForm.current := 1;
     AguardeForm.mostrar('Migrando para a web ' + nomeTabela,0,0,true);
-    AssignFile(log, 'c:\temp\log.txt');
     ReWrite(log);
 
     while not qry.Eof do
@@ -598,7 +624,7 @@ begin
       //Segunda passada. Agora com o espaço liberado e os registros já semi-integrados
       //ao remoto, faltando apenas o ajuste do id
       qry.close;
-      qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + nomePKLocal;      
+      qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + nomePKLocal;
       qry.Open;
       qry.FetchAll;
       AguardeForm.total := qry.RecordCount;
@@ -626,7 +652,7 @@ begin
     dmPrincipal.commit;
     FreeAndNil(qry);
     FreeAndNil(upd);
-  end;
+  end;}
 end;
 
 procedure TDataIntegradorModuloWeb.redirectRecord(idAntigo, idNovo: integer);
@@ -653,7 +679,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.duplicarRegistroSemOffset(ds: TDataSet);
 var
-  qry: TIBQuery;
+  qry: TSQLQuery;
   i: integer;
 begin
   qry := dmPrincipal.getQuery;
@@ -910,9 +936,5 @@ begin
   result := false;
 end;
 
-function TDataIntegradorModuloWeb.getHumanReadableName: string;
-begin
-  result := ClassName;
-end;
 
 end.
