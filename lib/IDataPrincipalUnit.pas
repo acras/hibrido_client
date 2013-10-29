@@ -2,7 +2,7 @@ unit IDataPrincipalUnit;
 
 interface
 
-uses IBQuery;
+uses Data.SqlExpr;
 
 type
 
@@ -34,7 +34,7 @@ IDataPrincipal = interface
   procedure refreshData;                                    //faz refresh dos dados do client
                                                             //em firebird por exemplo é um Commit Work
 
-  function getQuery: TIBQuery;                              //retorna um TIBquery conectado na base
+  function getQuery: TSQLQuery;                              //retorna um TSQLquery conectado na base
   function sincronizar: boolean;                            //indica se deve-se ou não sincronizar
                                                             //com a parte web. Útil quando queremos ter
                                                             //clientes que sincronizam e outros que não sincronizam
