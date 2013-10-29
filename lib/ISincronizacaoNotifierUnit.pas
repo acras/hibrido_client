@@ -9,6 +9,7 @@ ISincronizacaoNotifier = interface
   procedure unflagSalvandoDadosServidor;
   procedure flagBuscandoDadosServidor;
   procedure unflagBuscandoDadosServidor;
+  procedure setCustomMessage(content: string);
 end;
 
 implementation
