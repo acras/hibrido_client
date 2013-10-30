@@ -7,7 +7,7 @@ uses
   DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit,
-  ISincronizacaoNotifierUnit, Data.SqlExpr,
+  ISincronizacaoNotifierUnit, Data.SqlExpr
 
   {$IFDEF VER150}
   , fastString
@@ -565,7 +565,6 @@ end;
 procedure TDataIntegradorModuloWeb.migrateTableToRemote(where: string = '');
 var
   qry: TSQLQuery;
-  upd: TUpdateSQL;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   node : IXMLDomNode;
