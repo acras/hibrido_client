@@ -935,10 +935,4 @@ begin
   result := false;
 end;
 
-function TDataIntegradorModuloWeb.getHumanReadableName: string;
-begin
-  result := ClassName;
-end;
-
-
 end.
