@@ -112,6 +112,8 @@ type
     procedure beforeUpdateRecord(id: integer); virtual;
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
+    function maxRecords: integer; virtual; abstract;
+    function getHumanReadableName: string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -906,6 +908,11 @@ function TDataIntegradorModuloWeb.gerenciaRedirecionamentos(idLocal,
   idRemoto: integer): boolean;
 begin
   result := false;
+end;
+
+function TDataIntegradorModuloWeb.getHumanReadableName: string;
+begin
+  result := ClassName;
 end;
 
 end.
