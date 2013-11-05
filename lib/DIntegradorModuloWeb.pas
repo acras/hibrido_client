@@ -202,11 +202,16 @@ begin
   if not singleton then
   begin
     id := strToInt(node.selectSingleNode(dasherize(nomePKRemoto)).text);
-    if jaExiste(id) then
-      updateRecord(node, id)
-    else
-      insertRecord(node);
-    dmPrincipal.commit;
+    dmPrincipal.startTransaction;
+    try
+      if jaExiste(id) then
+        updateRecord(node, id)
+      else
+        insertRecord(node);
+      dmPrincipal.commit;
+    except
+      dmPrincipal.rollBack;
+    end;
   end
   else
     updateSingletonRecord(node);
@@ -493,16 +498,14 @@ end;
 procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer; params: TIdMultiPartFormDataStream;
   tabelaDetalhe: TTabelaDetalhe);
 var
-  qry: TSQLQuery;
+  qry: TSQLDataSet;
   i: integer;
 begin
   qry := dmPrincipal.getQuery;
   try
-    qry.SQL.Text := 'SELECT * FROM ' + tabelaDetalhe.nomeTabela + ' where ' + tabelaDetalhe.nomeFK +
+    qry.commandText := 'SELECT * FROM ' + tabelaDetalhe.nomeTabela + ' where ' + tabelaDetalhe.nomeFK +
       ' = ' + IntToStr(valorPK);
     qry.Open;
-    //TODO: Migração XE
-    //qry.FetchAll;
     while not qry.Eof do
     begin
       addTranslatedParams(qry, params, tabelaDetalhe.translations, tabelaDetalhe.nomeParametro);
@@ -517,12 +520,12 @@ end;
 
 procedure TDataIntegradorModuloWeb.migrateSingletonTableToRemote;
 var
-  qry: TSQLQuery;
+  qry: TSQLDataSet;
   salvou: boolean;
 begin
   qry := dmPrincipal.getQuery;
   try
-    qry.SQL.Text := 'SELECT * FROM ' + nomeTabela;
+    qry.CommandText := 'SELECT * FROM ' + nomeTabela;
     qry.Open;
     saveRecordToRemote(qry, salvou);
   finally
@@ -533,19 +536,17 @@ end;
 
 procedure TDataIntegradorModuloWeb.postRecordsToRemote;
 var
-  qry: TSQLQuery;
+  qry: TSQLDataSet;
   salvou: boolean;
 begin
   qry := dmPrincipal.getQuery;
   dmPrincipal.startTransaction;
   try try
     DataLog.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
-    qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' where (salvouRetaguarda = ' + QuotedStr('N') + ') '
+    qry.commandText := 'SELECT * from ' + nomeTabela + ' where (salvouRetaguarda = ' + QuotedStr('N') + ') '
       + getAdditionalSaveConditions;
     qry.Open;
     qry.First;
-    //TODO: Migração XE
-    //qry.FetchAll;
     while not qry.Eof do
     begin
       saveRecordToRemote(qry, salvou);
@@ -564,7 +565,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.migrateTableToRemote(where: string = '');
 var
-  qry: TSQLQuery;
+  qry: TSQLDataSet;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   node : IXMLDomNode;
@@ -572,19 +573,15 @@ var
   salvou: boolean;
   log: TextFile;
 begin
-//TODO: Migração XE (Será que precisa?)
-{  offset := dmPrincipal.getSQLIntegerResult('SELECT max(' + nomePKLocal + ' + 1) from ' +
+  offset := dmPrincipal.getSQLIntegerResult('SELECT max(' + nomePKLocal + ' + 1) from ' +
     nomeTabela + ' ');
   qry := dmPrincipal.getQuery;
-  upd := TUpdateSQL.Create(nil);
-  upd.ModifySQL.Text := 'SELECT * from ' + nomeTabela + ' where ' + nomePKLocal + ' = :' + nomePKLocal;
-  qry.UpdateObject := upd;
+  qry.CommandText := 'SELECT * from ' + nomeTabela + ' where ' + nomePKLocal + ' = :' + nomePKLocal;;
   dmPrincipal.startTransaction;
   try
-    qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + getOrderBy;
+    qry.commandText := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + getOrderBy;
     qry.Open;
     qry.First;
-    qry.FetchAll;
     AguardeForm.total := qry.RecordCount;
     AguardeForm.current := 1;
     AguardeForm.mostrar('Migrando para a web ' + nomeTabela,0,0,true);
@@ -623,9 +620,8 @@ begin
       //Segunda passada. Agora com o espaço liberado e os registros já semi-integrados
       //ao remoto, faltando apenas o ajuste do id
       qry.close;
-      qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + nomePKLocal;
+      qry.commandText := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + nomePKLocal;
       qry.Open;
-      qry.FetchAll;
       AguardeForm.total := qry.RecordCount;
       AguardeForm.current := 0;
       AguardeForm.mostrar('Corrigindo ids. Esta operação poder ser bastante demorada.', 0, 0, true);
@@ -650,8 +646,7 @@ begin
   finally
     dmPrincipal.commit;
     FreeAndNil(qry);
-    FreeAndNil(upd);
-  end;}
+  end;
 end;
 
 procedure TDataIntegradorModuloWeb.redirectRecord(idAntigo, idNovo: integer);
@@ -678,26 +673,26 @@ end;
 
 procedure TDataIntegradorModuloWeb.duplicarRegistroSemOffset(ds: TDataSet);
 var
-  qry: TSQLQuery;
+  qry: TSQLDataSet;
   i: integer;
 begin
   qry := dmPrincipal.getQuery;
   try
-    qry.SQL.Text := 'INSERT INTO ' + nomeTabela + '(';
+    qry.commandText := 'INSERT INTO ' + nomeTabela + '(';
     for i := 0 to ds.fieldCount -1 do
     begin
-      qry.SQL.Text := qry.SQL.Text + ds.Fields[i].FieldName;
+      qry.commandText := qry.commandText + ds.Fields[i].FieldName;
       if i < ds.fieldCount -1 then
-        qry.SQL.Text := qry.SQL.Text + ', ';
+        qry.commandText := qry.commandText + ', ';
     end;
-    qry.SQL.Text := qry.SQL.Text + ') values (';
+    qry.commandText := qry.commandText + ') values (';
     for i := 0 to ds.fieldCount -1 do
     begin
-      qry.SQL.Text := qry.SQL.Text + ':' + ds.Fields[i].FieldName;
+      qry.commandText := qry.commandText + ':' + ds.Fields[i].FieldName;
       if i < ds.fieldCount -1 then
-        qry.SQL.Text := qry.SQL.Text + ', ';
+        qry.commandText := qry.commandText + ', ';
     end;
-    qry.SQL.Text := qry.SQL.Text + ')';
+    qry.commandText := qry.commandText + ')';
     for i := 0 to ds.fieldCount -1 do
     begin
       if uppercase(ds.Fields[i].FieldName) = uppercase(nomePKLocal) then
