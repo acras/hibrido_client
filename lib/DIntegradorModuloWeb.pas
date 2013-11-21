@@ -6,7 +6,7 @@ uses
   SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
   DB, IdMultipartFormData, IBQuery, IbUpdateSQL, IdBaseComponent, IdComponent, IdTCPConnection,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
-  IDataPrincipalUnit
+  IDataPrincipalUnit, ISincronizacaoNotifierUnit
 
   {$IFDEF VER150}
   , fastString
@@ -54,6 +54,7 @@ type
     procedure DataModuleCreate(Sender: TObject);
   private
     FdmPrincipal: IDataPrincipal;
+    FSincronizacaoNotifier: ISincronizacaoNotifier;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -112,11 +113,12 @@ type
     procedure beforeUpdateRecord(id: integer); virtual;
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
-    function maxRecords: integer; virtual; abstract;
+    function maxRecords: integer; virtual; 
     function getHumanReadableName: string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
+    property notifier: ISincronizacaoNotifier read FSincronizacaoNotifier write FSincronizacaoNotifier;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     function getDadosAtualizados: TClientDataset;
@@ -147,27 +149,37 @@ var
   url, xmlContent: string;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
-  i: integer;
+  i, numRegistros: integer;
   node : IXMLDomNode;
+  keepImporting: boolean;
 begin
-  url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
-  xmlContent := getRemoteXmlContent(url);
-
-  if trim(xmlContent) <> '' then
+  keepImporting := true;
+  while keepImporting do
   begin
-    {$IFDEF VER150}
-    doc := CoDOMDocument.Create;
-    {$ELSE}
-    doc := CoDOMDocument60.Create;
-    {$ENDIF}
-    doc.loadXML(xmlContent);
-    list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
-    for i := 0 to list.length-1 do
+    url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
+    notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
+    xmlContent := getRemoteXmlContent(url);
+    if trim(xmlContent) <> '' then
     begin
-      node := list.item[i];
-      if node<>nil then
-        importRecord(node);
+      {$IFDEF VER150}
+      doc := CoDOMDocument.Create;
+      {$ELSE}
+      doc := CoDOMDocument60.Create;
+      {$ENDIF}
+      doc.loadXML(xmlContent);
+      list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
+      numRegistros := list.length;
+      notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
+      for i := 0 to numRegistros-1 do
+      begin
+        notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
+          '/' + IntToStr(numRegistros));
+        node := list.item[i];
+        if node<>nil then
+          importRecord(node);
+      end;
     end;
+    keepImporting := (maxRecords > 0) and (numRegistros >= maxRecords);
   end;
 end;
 
@@ -178,11 +190,16 @@ begin
   if not singleton then
   begin
     id := strToInt(node.selectSingleNode(dasherize(nomePKRemoto)).text);
-    if jaExiste(id) then
-      updateRecord(node, id)
-    else
-      insertRecord(node);
-    dmPrincipal.commit;
+    dmPrincipal.startTransaction;
+    try
+      if jaExiste(id) then
+        updateRecord(node, id)
+      else
+        insertRecord(node);
+      dmPrincipal.commit;
+    except
+      dmPrincipal.rollBack;
+    end;
   end
   else
     updateSingletonRecord(node);
@@ -913,6 +930,11 @@ end;
 function TDataIntegradorModuloWeb.getHumanReadableName: string;
 begin
   result := ClassName;
+end;
+
+function TDataIntegradorModuloWeb.maxRecords: integer;
+begin
+  result := 0;
 end;
 
 end.
