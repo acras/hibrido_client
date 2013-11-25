@@ -158,6 +158,7 @@ begin
   begin
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
     notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
+    numRegistros := 0;
     xmlContent := getRemoteXmlContent(url);
     if trim(xmlContent) <> '' then
     begin
