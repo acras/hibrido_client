@@ -59,7 +59,8 @@ type
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
-    procedure addTabelaDetalheParams(valorPK: integer; params: TIdMultiPartFormDataStream;
+    procedure addTabelaDetalheParams(valorPK: integer;
+      params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
   protected
     nomeTabela: string;
@@ -103,12 +104,12 @@ type
     function nomeSingularGet: string; virtual;
     procedure updateSingletonRecord(node: IXMLDOMNode);
     function getOrderBy: string; virtual;
-    procedure addMoreParams(ds: TDataSet; params: TIdMultiPartFormDataStream); virtual;
+    procedure addMoreParams(ds: TDataSet; params: TStringList); virtual;
     function singleton: boolean;
     function getUpdateBaseSQL(node: IXMLDOMNode): string;
-    procedure addDetails(ds: TDataSet; params: TIdMultiPartFormDataStream);
+    procedure addDetails(ds: TDataSet; params: TStringList);
     function addTranslatedParams(ds: TDataSet;
-      params: TIdMultiPartFormDataStream;
+      params: TStringList;
       translations: TTranslationSet; nestedAttribute: string = ''): IXMLDomDocument2;
     function getAdditionalSaveConditions: string; virtual;
     procedure beforeUpdateRecord(id: integer); virtual;
@@ -397,7 +398,7 @@ begin
 end;
 
 
-function TDataIntegradorModuloWeb.addTranslatedParams(ds: TDataSet; params: TIdMultiPartFormDataStream;
+function TDataIntegradorModuloWeb.addTranslatedParams(ds: TDataSet; params: TStringList;
   translations: TTranslationSet; nestedAttribute: string = ''): IXMLDomDocument2;
 var
   i: integer;
@@ -412,18 +413,18 @@ begin
     if ds.FindField(nomeCampo) <> nil then
     begin
       nome := nomeSingularSave + nestingText + '[' + translations.get(i).server + ']';
-      valor := UTF8Encode(
+      valor :=
         translateValueToServer(translations.get(i), translations.get(i).pdv,
-          ds.fieldByName(translations.get(i).pdv), nestedAttribute));
-      params.AddFormField(nome, valor);
+          ds.fieldByName(translations.get(i).pdv), nestedAttribute);
+      params.Add(nome + '=' + valor);
     end;
   end;
 end;
 
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet; var salvou: boolean): IXMLDomDocument2;
 var
-  http: TIdHTTP;       
-  params: TIdMultiPartFormDataStream;
+  http: TIdHTTP;
+  params: TStringList;
   xmlContent: string;
   doc: IXMLDomDocument2;
   i, idRemoto: integer;
@@ -433,12 +434,11 @@ begin
   DataLog.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   http := TIdHTTP.Create(nil);
-  params := TIdMultiPartFormDataStream.Create;
+  params := TStringList.Create;
   try
     addTranslatedParams(ds, params, translations);
     addDetails(ds, params);
     addMoreParams(ds, params);
-    params.AddFormField('', '');
 
     sucesso := false;
     while not sucesso do
@@ -488,7 +488,7 @@ begin
   end;
 end;
 
-procedure TDataIntegradorModuloWeb.addDetails(ds: TDataSet; params: TIdMultiPartFormDataStream);
+procedure TDataIntegradorModuloWeb.addDetails(ds: TDataSet; params: TStringList);
 var
   i : integer;
 begin
@@ -496,7 +496,8 @@ begin
     addTabelaDetalheParams(ds.fieldByName(nomePKLocal).AsInteger, params, tabelasDetalhe[i]);
 end;
 
-procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer; params: TIdMultiPartFormDataStream;
+procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer;
+  params: TStringList;
   tabelaDetalhe: TTabelaDetalhe);
 var
   qry: TSQLDataSet;
@@ -888,7 +889,7 @@ begin
 end;
 
 procedure TDataIntegradorModuloWeb.addMoreParams(ds: TDataSet;
-  params: TIdMultiPartFormDataStream);
+  params: TStringList);
 begin
   //nothing to add here
 end;
