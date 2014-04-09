@@ -70,6 +70,7 @@ type
     nomePKRemoto: string;
     nomeGenerator: string;
     duasVias: boolean;
+    useMultipartParams: boolean;
     clientToServer: boolean;
     tabelasDependentes: array of TTabelaDependente;
     tabelasDetalhe: array of TTabelaDetalhe;
@@ -105,6 +106,9 @@ type
     procedure updateSingletonRecord(node: IXMLDOMNode);
     function getOrderBy: string; virtual;
     procedure addMoreParams(ds: TDataSet; params: TStringList); virtual;
+    procedure prepareMultipartParams(ds: TDataSet;
+      params: TStringList;
+      multipartParams: TIdMultiPartFormDataStream); virtual; abstract;
     function singleton: boolean;
     function getUpdateBaseSQL(node: IXMLDOMNode): string;
     procedure addDetails(ds: TDataSet; params: TStringList);
@@ -425,16 +429,19 @@ function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet; var salvou: b
 var
   http: TIdHTTP;
   params: TStringList;
+  multipartParams: TidMultipartFormDataStream;
   xmlContent: string;
   doc: IXMLDomDocument2;
   i, idRemoto: integer;
   nome, nomeCampo, valor, txtUpdate: string;
   sucesso: boolean;
+  stream: TStringStream;
 begin
   DataLog.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   http := TIdHTTP.Create(nil);
   params := TStringList.Create;
+  multiPartParams := TIdMultiPartFormDataStream.Create;
   try
     addTranslatedParams(ds, params, translations);
     addDetails(ds, params);
@@ -444,7 +451,15 @@ begin
     while not sucesso do
     begin
       try
-        xmlContent := http.Post(getRequestUrlForAction(true), params);
+        if useMultipartParams then
+        begin
+          stream := TStringStream.Create('');
+          prepareMultipartParams(ds, params, multipartParams);
+          http.Post(getRequestUrlForAction(true), multipartParams, stream);
+          xmlContent := stream.ToString;
+        end
+        else
+          xmlContent := http.Post(getRequestUrlForAction(true), params);
         sucesso := true;
         {$IFDEF VER150}
         doc := CoDOMDocument.Create;
@@ -779,6 +794,7 @@ begin
   nomePKRemoto := 'id';
   SetLength(tabelasDependentes, 0);
   nomeGenerator := '';
+  useMultipartParams := false;
 end;
 
 
