@@ -88,7 +88,7 @@ type
     function getFieldValues(node: IXMLDomNode): string;
     function translateFieldValue(node: IXMLDomNode): string; virtual;
     function translateFieldNamePdvToServer(node: IXMLDomNode): string;
-    function translateFieldNameServerToPdv(node: IXMLDomNode): string;
+    function translateFieldNameServerToPdv(node: IXMLDomNode): string; virtual;
     function translateTypeValue(fieldType, fieldValue: string): string;
     function translateValueToServer(translation: TNameTranslation;
       fieldName: string; field: TField;
@@ -560,7 +560,7 @@ begin
   dmPrincipal.startTransaction;
   try try
     DataLog.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
-    qry.commandText := 'SELECT * from ' + nomeTabela + ' where (salvouRetaguarda = ' + QuotedStr('N') + ') '
+    qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
       + getAdditionalSaveConditions;
     qry.Open;
     qry.First;
@@ -849,7 +849,12 @@ begin
         result := FormatDateTime('dd"/"mm"/"yyyy"T"hh":"nn":"ss', field.AsDateTime);
     end
     else if field.DataType in [ftDate] then
-      result := FormatDateTime('dd"/"mm"/"yyyy', field.AsDateTime)
+    begin
+      if field.IsNull then
+        result := 'NULL'
+      else
+        result := FormatDateTime('dd"/"mm"/"yyyy', field.AsDateTime);
+    end
     else
       result := field.asString;
   end;
