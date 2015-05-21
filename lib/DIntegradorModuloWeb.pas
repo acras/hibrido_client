@@ -3,11 +3,11 @@ unit DIntegradorModuloWeb;
 interface
 
 uses
-  SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
+  SysUtils, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
   DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
-  IDataPrincipalUnit,
-  ISincronizacaoNotifierUnit, Data.SqlExpr
+  IDataPrincipalUnit, idURI, System.Classes, Windows,
+  ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc
 
   {$IFDEF VER150}
   , fastString
@@ -75,6 +75,7 @@ type
     tabelasDependentes: array of TTabelaDependente;
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
+    zippedPost: boolean;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
     function ultimaVersao: integer;
@@ -420,6 +421,7 @@ begin
       valor :=
         translateValueToServer(translations.get(i), translations.get(i).pdv,
           ds.fieldByName(translations.get(i).pdv), nestedAttribute);
+      //params.Add(nome + '=' + TIdURI.ParamsEncode(valor));
       params.Add(nome + '=' + valor);
     end;
   end;
@@ -436,6 +438,10 @@ var
   nome, nomeCampo, valor, txtUpdate: string;
   sucesso: boolean;
   stream: TStringStream;
+  zippedParams: TMemoryStream;
+  zipper: TAbZipper;
+  url, s: string;
+  a,b: cardinal;
 begin
   DataLog.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
@@ -446,7 +452,6 @@ begin
     addTranslatedParams(ds, params, translations);
     addDetails(ds, params);
     addMoreParams(ds, params);
-
     sucesso := false;
     while not sucesso do
     begin
@@ -459,7 +464,39 @@ begin
           xmlContent := stream.ToString;
         end
         else
-          xmlContent := http.Post(getRequestUrlForAction(true), params);
+        begin
+          url := getRequestUrlForAction(true);
+          {
+            A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
+            e precisa ser garantido que o post está de fato indo zipado.
+          }
+          if zippedPost then
+          begin
+            params.Delimiter := '&';
+            params.QuoteChar := '&';
+            s := params.DelimitedText;
+            stream := TStringStream.Create(utf8Encode(s));
+            try
+              zippedParams := TMemoryStream.Create;
+              zipper := TAbZipper.Create(nil);
+              zipper.ArchiveType := atGzip;
+              zipper.ForceType := true;
+              zipper.Stream := zippedParams;
+              zipper.AddFromStream('', stream);
+              http.Request.contentEncoding := 'gzip';
+              xmlContent := http.Post(url, zippedParams);
+            finally
+              if zipper <> nil then
+                freeAndNil(zipper);
+              if zippedParams <> nil then
+                freeAndNil(zippedParams);
+            end;
+          end
+          else
+          begin
+            xmlContent := http.Post(url, Params);
+          end;
+        end;
         sucesso := true;
         {$IFDEF VER150}
         doc := CoDOMDocument.Create;
@@ -795,6 +832,7 @@ begin
   SetLength(tabelasDependentes, 0);
   nomeGenerator := '';
   useMultipartParams := false;
+  zippedPost := true;
 end;
 
 
@@ -832,6 +870,7 @@ begin
         {$ENDIF}
         result := field.AsString;
       finally
+
         {$IFDEF VER150}
         DecimalSeparator := ',';
         ThousandSeparator := '.';
@@ -841,19 +880,20 @@ begin
         {$ENDIF}
       end;
     end
-    else if field.DataType in [ftDateTime] then
+    else if field.DataType in [ftDateTime, ftTimeStamp] then
     begin
       if field.IsNull then
         result := 'NULL'
       else
-        result := FormatDateTime('dd"/"mm"/"yyyy"T"hh":"nn":"ss', field.AsDateTime);
+        result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', field.AsDateTime);
+        //result := FormatDateTime('dd"/"mm"/"yyyy"T"hh":"nn":"ss', field.AsDateTime);
     end
     else if field.DataType in [ftDate] then
     begin
       if field.IsNull then
         result := 'NULL'
       else
-        result := FormatDateTime('dd"/"mm"/"yyyy', field.AsDateTime);
+        result := FormatDateTime('yyyy-mm-dd', field.AsDateTime);
     end
     else
       result := field.asString;
