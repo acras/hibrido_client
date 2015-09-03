@@ -3,16 +3,11 @@ unit DIntegradorModuloWeb;
 interface
 
 uses
-  SysUtils, Classes, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
-  DB, IdMultipartFormData, IBQuery, IbUpdateSQL, IdBaseComponent, IdComponent, IdTCPConnection,
+  SysUtils, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
+  DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
-  IDataPrincipalUnit, ISincronizacaoNotifierUnit
-
-  {$IFDEF VER150}
-  , fastString
-  {$ENDIF}
-
-  ;
+  IDataPrincipalUnit, idURI, System.Classes, Windows,
+  ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc;
 
 type
   TNameTranslation = record
@@ -54,11 +49,12 @@ type
     procedure DataModuleCreate(Sender: TObject);
   private
     FdmPrincipal: IDataPrincipal;
-    FSincronizacaoNotifier: ISincronizacaoNotifier;
+    Fnotifier: ISincronizacaoNotifier;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
-    procedure addTabelaDetalheParams(valorPK: integer; params: TIdMultiPartFormDataStream;
+    procedure addTabelaDetalheParams(valorPK: integer;
+      params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
   protected
     nomeTabela: string;
@@ -68,10 +64,12 @@ type
     nomePKRemoto: string;
     nomeGenerator: string;
     duasVias: boolean;
+    useMultipartParams: boolean;
     clientToServer: boolean;
     tabelasDependentes: array of TTabelaDependente;
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
+    zippedPost: boolean;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
     function ultimaVersao: integer;
@@ -85,7 +83,7 @@ type
     function getFieldValues(node: IXMLDomNode): string;
     function translateFieldValue(node: IXMLDomNode): string; virtual;
     function translateFieldNamePdvToServer(node: IXMLDomNode): string;
-    function translateFieldNameServerToPdv(node: IXMLDomNode): string;
+    function translateFieldNameServerToPdv(node: IXMLDomNode): string; virtual;
     function translateTypeValue(fieldType, fieldValue: string): string;
     function translateValueToServer(translation: TNameTranslation;
       fieldName: string; field: TField;
@@ -102,23 +100,26 @@ type
     function nomeSingularGet: string; virtual;
     procedure updateSingletonRecord(node: IXMLDOMNode);
     function getOrderBy: string; virtual;
-    procedure addMoreParams(ds: TDataSet; params: TIdMultiPartFormDataStream); virtual;
+    procedure addMoreParams(ds: TDataSet; params: TStringList); virtual;
+    procedure prepareMultipartParams(ds: TDataSet;
+      params: TStringList;
+      multipartParams: TIdMultiPartFormDataStream); virtual; abstract;
     function singleton: boolean;
     function getUpdateBaseSQL(node: IXMLDOMNode): string;
-    procedure addDetails(ds: TDataSet; params: TIdMultiPartFormDataStream);
+    procedure addDetails(ds: TDataSet; params: TStringList);
     function addTranslatedParams(ds: TDataSet;
-      params: TIdMultiPartFormDataStream;
+      params: TStringList;
       translations: TTranslationSet; nestedAttribute: string = ''): IXMLDomDocument2;
     function getAdditionalSaveConditions: string; virtual;
     procedure beforeUpdateRecord(id: integer); virtual;
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
-    function maxRecords: integer; virtual; 
+    function maxRecords: integer; virtual;
     function getHumanReadableName: string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
-    property notifier: ISincronizacaoNotifier read FSincronizacaoNotifier write FSincronizacaoNotifier;
+    property notifier: ISincronizacaoNotifier read Fnotifier write Fnotifier;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     function getDadosAtualizados: TClientDataset;
@@ -160,13 +161,10 @@ begin
     notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
     numRegistros := 0;
     xmlContent := getRemoteXmlContent(url);
+
     if trim(xmlContent) <> '' then
     begin
-      {$IFDEF VER150}
-      doc := CoDOMDocument.Create;
-      {$ELSE}
       doc := CoDOMDocument60.Create;
-      {$ENDIF}
       doc.loadXML(xmlContent);
       list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
       numRegistros := list.length;
@@ -182,6 +180,16 @@ begin
     end;
     keepImporting := (maxRecords > 0) and (numRegistros >= maxRecords);
   end;
+end;
+
+function TDataIntegradorModuloWeb.getHumanReadableName: string;
+begin
+  result := ClassName;
+end;
+
+function TDataIntegradorModuloWeb.maxRecords: integer;
+begin
+  result := 0;
 end;
 
 procedure TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode);
@@ -385,7 +393,7 @@ begin
 end;
 
 
-function TDataIntegradorModuloWeb.addTranslatedParams(ds: TDataSet; params: TIdMultiPartFormDataStream;
+function TDataIntegradorModuloWeb.addTranslatedParams(ds: TDataSet; params: TStringList;
   translations: TTranslationSet; nestedAttribute: string = ''): IXMLDomDocument2;
 var
   i: integer;
@@ -400,39 +408,85 @@ begin
     if ds.FindField(nomeCampo) <> nil then
     begin
       nome := nomeSingularSave + nestingText + '[' + translations.get(i).server + ']';
-      valor := UTF8Encode(
+      valor :=
         translateValueToServer(translations.get(i), translations.get(i).pdv,
-          ds.fieldByName(translations.get(i).pdv), nestedAttribute));
-      params.AddFormField(nome, valor);
+          ds.fieldByName(translations.get(i).pdv), nestedAttribute);
+      //params.Add(nome + '=' + TIdURI.ParamsEncode(valor));
+      params.Add(nome + '=' + valor);
     end;
   end;
 end;
 
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet; var salvou: boolean): IXMLDomDocument2;
 var
-  http: TIdHTTP;       
-  params: TIdMultiPartFormDataStream;
+  http: TIdHTTP;
+  params: TStringList;
+  multipartParams: TidMultipartFormDataStream;
   xmlContent: string;
   doc: IXMLDomDocument2;
   i, idRemoto: integer;
   nome, nomeCampo, valor, txtUpdate: string;
   sucesso: boolean;
+  stream: TStringStream;
+  zippedParams: TMemoryStream;
+  zipper: TAbZipper;
+  url, s: string;
+  a,b: cardinal;
 begin
   DataLog.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   http := TIdHTTP.Create(nil);
-  params := TIdMultiPartFormDataStream.Create;
+  params := TStringList.Create;
+  multiPartParams := TIdMultiPartFormDataStream.Create;
   try
     addTranslatedParams(ds, params, translations);
     addDetails(ds, params);
     addMoreParams(ds, params);
-    params.AddFormField('', '');
-
     sucesso := false;
     while not sucesso do
     begin
       try
-        xmlContent := http.Post(getRequestUrlForAction(true), params);
+        if useMultipartParams then
+        begin
+          stream := TStringStream.Create('');
+          prepareMultipartParams(ds, params, multipartParams);
+          http.Post(getRequestUrlForAction(true), multipartParams, stream);
+          xmlContent := stream.ToString;
+        end
+        else
+        begin
+          url := getRequestUrlForAction(true);
+          {
+            A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
+            e precisa ser garantido que o post está de fato indo zipado.
+          }
+          if zippedPost then
+          begin
+            params.Delimiter := '&';
+            params.QuoteChar := '&';
+            s := params.DelimitedText;
+            stream := TStringStream.Create(utf8Encode(s));
+            try
+              zippedParams := TMemoryStream.Create;
+              zipper := TAbZipper.Create(nil);
+              zipper.ArchiveType := atGzip;
+              zipper.ForceType := true;
+              zipper.Stream := zippedParams;
+              zipper.AddFromStream('', stream);
+              http.Request.contentEncoding := 'gzip';
+              xmlContent := http.Post(url, zippedParams);
+            finally
+              if zipper <> nil then
+                freeAndNil(zipper);
+              if zippedParams <> nil then
+                freeAndNil(zippedParams);
+            end;
+          end
+          else
+          begin
+            xmlContent := http.Post(url, Params);
+          end;
+        end;
         sucesso := true;
         {$IFDEF VER150}
         doc := CoDOMDocument.Create;
@@ -476,7 +530,7 @@ begin
   end;
 end;
 
-procedure TDataIntegradorModuloWeb.addDetails(ds: TDataSet; params: TIdMultiPartFormDataStream);
+procedure TDataIntegradorModuloWeb.addDetails(ds: TDataSet; params: TStringList);
 var
   i : integer;
 begin
@@ -484,18 +538,18 @@ begin
     addTabelaDetalheParams(ds.fieldByName(nomePKLocal).AsInteger, params, tabelasDetalhe[i]);
 end;
 
-procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer; params: TIdMultiPartFormDataStream;
+procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer;
+  params: TStringList;
   tabelaDetalhe: TTabelaDetalhe);
 var
-  qry: TIBQuery;
+  qry: TSQLDataSet;
   i: integer;
 begin
   qry := dmPrincipal.getQuery;
   try
-    qry.SQL.Text := 'SELECT * FROM ' + tabelaDetalhe.nomeTabela + ' where ' + tabelaDetalhe.nomeFK +
+    qry.commandText := 'SELECT * FROM ' + tabelaDetalhe.nomeTabela + ' where ' + tabelaDetalhe.nomeFK +
       ' = ' + IntToStr(valorPK);
     qry.Open;
-    qry.FetchAll;
     while not qry.Eof do
     begin
       addTranslatedParams(qry, params, tabelaDetalhe.translations, tabelaDetalhe.nomeParametro);
@@ -510,12 +564,12 @@ end;
 
 procedure TDataIntegradorModuloWeb.migrateSingletonTableToRemote;
 var
-  qry: TIBQuery;
+  qry: TSQLDataSet;
   salvou: boolean;
 begin
   qry := dmPrincipal.getQuery;
   try
-    qry.SQL.Text := 'SELECT * FROM ' + nomeTabela;
+    qry.CommandText := 'SELECT * FROM ' + nomeTabela;
     qry.Open;
     saveRecordToRemote(qry, salvou);
   finally
@@ -526,18 +580,17 @@ end;
 
 procedure TDataIntegradorModuloWeb.postRecordsToRemote;
 var
-  qry: TIBQuery;
+  qry: TSQLDataSet;
   salvou: boolean;
 begin
   qry := dmPrincipal.getQuery;
   dmPrincipal.startTransaction;
   try try
     DataLog.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
-    qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' where (salvouRetaguarda = ' + QuotedStr('N') + ') '
+    qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
       + getAdditionalSaveConditions;
     qry.Open;
     qry.First;
-    qry.FetchAll;
     while not qry.Eof do
     begin
       saveRecordToRemote(qry, salvou);
@@ -556,8 +609,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.migrateTableToRemote(where: string = '');
 var
-  qry: TIBQuery;
-  upd: TIBUpdateSQL;
+  qry: TSQLDataSet;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   node : IXMLDomNode;
@@ -568,19 +620,15 @@ begin
   offset := dmPrincipal.getSQLIntegerResult('SELECT max(' + nomePKLocal + ' + 1) from ' +
     nomeTabela + ' ');
   qry := dmPrincipal.getQuery;
-  upd := TIBUpdateSQL.Create(nil);
-  upd.RefreshSQL.Text := 'SELECT * from ' + nomeTabela + ' where ' + nomePKLocal + ' = :' + nomePKLocal;
-  qry.UpdateObject := upd;
+  qry.CommandText := 'SELECT * from ' + nomeTabela + ' where ' + nomePKLocal + ' = :' + nomePKLocal;;
   dmPrincipal.startTransaction;
   try
-    qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + getOrderBy;
+    qry.commandText := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + getOrderBy;
     qry.Open;
     qry.First;
-    qry.FetchAll;
     AguardeForm.total := qry.RecordCount;
     AguardeForm.current := 1;
     AguardeForm.mostrar('Migrando para a web ' + nomeTabela,0,0,true);
-    AssignFile(log, 'c:\temp\log.txt');
     ReWrite(log);
 
     while not qry.Eof do
@@ -616,9 +664,8 @@ begin
       //Segunda passada. Agora com o espaço liberado e os registros já semi-integrados
       //ao remoto, faltando apenas o ajuste do id
       qry.close;
-      qry.SQL.Text := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + nomePKLocal;      
+      qry.commandText := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + nomePKLocal;
       qry.Open;
-      qry.FetchAll;
       AguardeForm.total := qry.RecordCount;
       AguardeForm.current := 0;
       AguardeForm.mostrar('Corrigindo ids. Esta operação poder ser bastante demorada.', 0, 0, true);
@@ -643,7 +690,6 @@ begin
   finally
     dmPrincipal.commit;
     FreeAndNil(qry);
-    FreeAndNil(upd);
   end;
 end;
 
@@ -671,26 +717,26 @@ end;
 
 procedure TDataIntegradorModuloWeb.duplicarRegistroSemOffset(ds: TDataSet);
 var
-  qry: TIBQuery;
+  qry: TSQLDataSet;
   i: integer;
 begin
   qry := dmPrincipal.getQuery;
   try
-    qry.SQL.Text := 'INSERT INTO ' + nomeTabela + '(';
+    qry.commandText := 'INSERT INTO ' + nomeTabela + '(';
     for i := 0 to ds.fieldCount -1 do
     begin
-      qry.SQL.Text := qry.SQL.Text + ds.Fields[i].FieldName;
+      qry.commandText := qry.commandText + ds.Fields[i].FieldName;
       if i < ds.fieldCount -1 then
-        qry.SQL.Text := qry.SQL.Text + ', ';
+        qry.commandText := qry.commandText + ', ';
     end;
-    qry.SQL.Text := qry.SQL.Text + ') values (';
+    qry.commandText := qry.commandText + ') values (';
     for i := 0 to ds.fieldCount -1 do
     begin
-      qry.SQL.Text := qry.SQL.Text + ':' + ds.Fields[i].FieldName;
+      qry.commandText := qry.commandText + ':' + ds.Fields[i].FieldName;
       if i < ds.fieldCount -1 then
-        qry.SQL.Text := qry.SQL.Text + ', ';
+        qry.commandText := qry.commandText + ', ';
     end;
-    qry.SQL.Text := qry.SQL.Text + ')';
+    qry.commandText := qry.commandText + ')';
     for i := 0 to ds.fieldCount -1 do
     begin
       if uppercase(ds.Fields[i].FieldName) = uppercase(nomePKLocal) then
@@ -775,6 +821,8 @@ begin
   nomePKRemoto := 'id';
   SetLength(tabelasDependentes, 0);
   nomeGenerator := '';
+  useMultipartParams := false;
+  zippedPost := true;
 end;
 
 
@@ -812,6 +860,7 @@ begin
         {$ENDIF}
         result := field.AsString;
       finally
+
         {$IFDEF VER150}
         DecimalSeparator := ',';
         ThousandSeparator := '.';
@@ -821,15 +870,21 @@ begin
         {$ENDIF}
       end;
     end
-    else if field.DataType in [ftDateTime] then
+    else if field.DataType in [ftDateTime, ftTimeStamp] then
     begin
       if field.IsNull then
         result := 'NULL'
       else
+        //result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', field.AsDateTime);
         result := FormatDateTime('dd"/"mm"/"yyyy"T"hh":"nn":"ss', field.AsDateTime);
     end
     else if field.DataType in [ftDate] then
-      result := FormatDateTime('dd"/"mm"/"yyyy', field.AsDateTime)
+    begin
+      if field.IsNull then
+        result := 'NULL'
+      else
+        result := FormatDateTime('yyyy-mm-dd', field.AsDateTime);
+    end
     else
       result := field.asString;
   end;
@@ -885,7 +940,7 @@ begin
 end;
 
 procedure TDataIntegradorModuloWeb.addMoreParams(ds: TDataSet;
-  params: TIdMultiPartFormDataStream);
+  params: TStringList);
 begin
   //nothing to add here
 end;
@@ -926,16 +981,6 @@ function TDataIntegradorModuloWeb.gerenciaRedirecionamentos(idLocal,
   idRemoto: integer): boolean;
 begin
   result := false;
-end;
-
-function TDataIntegradorModuloWeb.getHumanReadableName: string;
-begin
-  result := ClassName;
-end;
-
-function TDataIntegradorModuloWeb.maxRecords: integer;
-begin
-  result := 0;
 end;
 
 end.

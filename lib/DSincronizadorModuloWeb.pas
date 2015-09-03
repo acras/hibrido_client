@@ -104,6 +104,7 @@ begin
       begin
         dmIntegrador := posterDataModules[i].Create(nil);
         try
+          dmIntegrador.notifier := FNotifier;
           dmIntegrador.dmPrincipal := dm;
           dmIntegrador.postRecordsToRemote;
         finally
@@ -147,6 +148,7 @@ begin
         begin
           with block[j].Create(nil) do
           begin
+            notifier := self.notifier;
             dmPrincipal := dm;
             getDadosAtualizados;
             if Assigned(onStepGetters) then onStepGetters(block[j].className, i+1, length(getterBlocks));
