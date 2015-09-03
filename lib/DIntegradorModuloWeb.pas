@@ -885,8 +885,8 @@ begin
       if field.IsNull then
         result := 'NULL'
       else
-        result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', field.AsDateTime);
-        //result := FormatDateTime('dd"/"mm"/"yyyy"T"hh":"nn":"ss', field.AsDateTime);
+        //result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', field.AsDateTime);
+        result := FormatDateTime('dd"/"mm"/"yyyy"T"hh":"nn":"ss', field.AsDateTime);
     end
     else if field.DataType in [ftDate] then
     begin
