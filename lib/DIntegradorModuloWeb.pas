@@ -4,7 +4,7 @@ interface
 
 uses
   SysUtils, ExtCtrls, DBClient, idHTTP, MSXML2_TLB, dialogs, acStrUtils, acNetUtils,
-  DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection,
+  DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection, forms,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc;
@@ -510,9 +510,11 @@ begin
           //da a chance da classe gerenciar redirecionamentos, por exemplo ao descobrir que este registro já
           //existia no remoto e era outro registro neste banco de dados.
           if not gerenciaRedirecionamentos(ds.fieldByName(nomePKLocal).AsInteger, idRemoto) then
+          begin
+            dmPrincipal.startTransaction;
             dmPrincipal.execSQL(txtUpdate);
-
-          dmPrincipal.refreshData;
+            dmPrincipal.commit;
+          end;
         end;
       except
         on e: Exception do
@@ -582,21 +584,29 @@ procedure TDataIntegradorModuloWeb.postRecordsToRemote;
 var
   qry: TSQLDataSet;
   salvou: boolean;
+  n, total: integer;
 begin
   qry := dmPrincipal.getQuery;
-  dmPrincipal.startTransaction;
+  //dmPrincipal.startTransaction;
   try try
     DataLog.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
     qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
       + getAdditionalSaveConditions;
     qry.Open;
+    total := qry.RecordCount;
+    n := 1;
     qry.First;
     while not qry.Eof do
     begin
+      notifier.setCustomMessage('Salvando ' + getHumanReadableName +
+        ' ' + IntToStr(n) + '/' + IntToStr(total));
+      inc(n);
+      Application.ProcessMessages;
       saveRecordToRemote(qry, salvou);
       qry.Next;
     end;
-    dmPrincipal.commit;
+    notifier.unflagSalvandoDadosServidor;
+    //dmPrincipal.commit;
     DataLog.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
   except
     DataLog.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
