@@ -122,7 +122,7 @@ type
     property notifier: ISincronizacaoNotifier read Fnotifier write Fnotifier;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
-    function getDadosAtualizados: TClientDataset;
+    function getDadosAtualizados(http: TidHTTP = nil): TClientDataset;
     function saveRecordToRemote(
       ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
     procedure migrateTableToRemote(where: string = '');
@@ -146,7 +146,7 @@ begin
   result := '';
 end;
 
-function TDataIntegradorModuloWeb.getDadosAtualizados: TClientDataset;
+function TDataIntegradorModuloWeb.getDadosAtualizados(http: TidHTTP = nil): TClientDataset;
 var
   url, xmlContent: string;
   doc: IXMLDomDocument2;
@@ -161,7 +161,7 @@ begin
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
     notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
     numRegistros := 0;
-    xmlContent := getRemoteXmlContent(url);
+    xmlContent := getRemoteXmlContent(url, http);
 
     if trim(xmlContent) <> '' then
     begin
@@ -441,7 +441,7 @@ begin
   if http = nil then
   begin
     criouHTTP := true;
-    http := TIdHTTP.Create(nil);
+    http := getHTTPInstance;
   end;
   params := TStringList.Create;
   multiPartParams := TIdMultiPartFormDataStream.Create;

@@ -75,7 +75,7 @@ var
 
 implementation
 
-uses ComObj, DLog;
+uses ComObj, DLog, acNetUtils;
 
 {$R *.dfm}
 
@@ -102,17 +102,14 @@ begin
   if dm.sincronizar then
   begin
     try try
-      http := TIdHTTP.Create(nil);
-      http.ProtocolVersion := pv1_1;
-      http.HTTPOptions := http.HTTPOptions + [hoKeepOrigProtocol];
-      http.Request.Connection := 'keep-alive';
+      http := getHTTPInstance;
       for i := 0 to length(posterDataModules)-1 do
       begin
         dmIntegrador := posterDataModules[i].Create(nil);
         try
           dmIntegrador.notifier := FNotifier;
           dmIntegrador.dmPrincipal := dm;
-          dmIntegrador.postRecordsToRemote;
+          dmIntegrador.postRecordsToRemote(http);
         finally
           FreeAndNil(dmIntegrador);
         end;
@@ -145,8 +142,10 @@ var
   i, j: integer;
   block: TServerToClientBlock;
   dm: IDataPrincipal;
+  http: TidHTTP;
 begin
   dm := getNewDataPrincipal;
+  http := getHTTPInstance;
   try
     for i := 0 to length(getterBlocks) - 1 do
     begin
@@ -159,7 +158,7 @@ begin
           begin
             notifier := self.notifier;
             dmPrincipal := dm;
-            getDadosAtualizados;
+            getDadosAtualizados(http);
             if Assigned(onStepGetters) then onStepGetters(block[j].className, i+1, length(getterBlocks));
             free;
           end;
@@ -171,6 +170,7 @@ begin
     end;
   finally
     dm := nil;
+    http := nil;
   end;
 end;
 
