@@ -123,10 +123,11 @@ type
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     function getDadosAtualizados: TClientDataset;
-    function saveRecordToRemote(ds: TDataSet; var salvou: boolean): IXMLDomDocument2;
+    function saveRecordToRemote(
+      ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
     procedure migrateTableToRemote(where: string = '');
     procedure migrateSingletonTableToRemote;
-    procedure postRecordsToRemote;
+    procedure postRecordsToRemote(http: TidHTTP = nil);
     class procedure updateDataSets; virtual;
   end;
 
@@ -417,9 +418,9 @@ begin
   end;
 end;
 
-function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet; var salvou: boolean): IXMLDomDocument2;
+function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
+  var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
 var
-  http: TIdHTTP;
   params: TStringList;
   multipartParams: TidMultipartFormDataStream;
   xmlContent: string;
@@ -427,15 +428,21 @@ var
   i, idRemoto: integer;
   nome, nomeCampo, valor, txtUpdate: string;
   sucesso: boolean;
-  stream: TStringStream;
+  strs, stream: TStringStream;
   zippedParams: TMemoryStream;
   zipper: TAbZipper;
   url, s: string;
   a,b: cardinal;
+  criouHttp: boolean;
 begin
   DataLog.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
-  http := TIdHTTP.Create(nil);
+  criouHTTP := false;
+  if http = nil then
+  begin
+    criouHTTP := true;
+    http := TIdHTTP.Create(nil);
+  end;
   params := TStringList.Create;
   multiPartParams := TIdMultiPartFormDataStream.Create;
   try
@@ -460,26 +467,24 @@ begin
             A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
             e precisa ser garantido que o post está de fato indo zipado.
           }
+
           if zippedPost then
           begin
-            params.Delimiter := '&';
-            params.QuoteChar := '&';
-            s := params.DelimitedText;
-            stream := TStringStream.Create(utf8Encode(s));
+            http.Request.ContentEncoding := 'gzip';
+            zippedParams := TMemoryStream.Create;
+            zipper := TAbZipper.Create(nil);
             try
-              zippedParams := TMemoryStream.Create;
-              zipper := TAbZipper.Create(nil);
+              strs := TStringStream.Create(utf8Encode(params.ToString), TEncoding.UTF8);
               zipper.ArchiveType := atGzip;
               zipper.ForceType := true;
               zipper.Stream := zippedParams;
-              zipper.AddFromStream('', stream);
-              http.Request.contentEncoding := 'gzip';
+              zipper.AddFromStream('', strs);
+              DataLog.log('Pré post da NFCe', 'NFCe');
               xmlContent := http.Post(url, zippedParams);
+              DataLog.log('Pós post da NFCe', 'NFCe');
             finally
-              if zipper <> nil then
-                freeAndNil(zipper);
-              if zippedParams <> nil then
-                freeAndNil(zippedParams);
+              freeAndNil(zipper);
+              freeAndNil(zippedParams);
             end;
           end
           else
@@ -527,7 +532,8 @@ begin
     end;
     salvou := sucesso;
   finally
-    FreeAndNil(http);
+    if criouHttp then
+      FreeAndNil(http);
     FreeAndNil(params);
   end;
 end;
@@ -580,14 +586,14 @@ begin
 end;
 
 
-procedure TDataIntegradorModuloWeb.postRecordsToRemote;
+procedure TDataIntegradorModuloWeb.postRecordsToRemote(http: TidHTTP = nil);
 var
   qry: TSQLDataSet;
   salvou: boolean;
   n, total: integer;
+  criouHTTP: boolean;
 begin
   qry := dmPrincipal.getQuery;
-  //dmPrincipal.startTransaction;
   try try
     DataLog.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
     qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
@@ -595,6 +601,15 @@ begin
     qry.Open;
     total := qry.RecordCount;
     n := 1;
+    criouHTTP := false;
+    if http = nil then
+    begin
+      criouHTTP := true;
+      http := TIdHTTP.Create(nil);
+      http.ProtocolVersion := pv1_1;
+      http.HTTPOptions := http.HTTPOptions + [hoKeepOrigProtocol];
+      http.Request.Connection := 'keep-alive';
+    end;
     qry.First;
     while not qry.Eof do
     begin
@@ -602,11 +617,11 @@ begin
         ' ' + IntToStr(n) + '/' + IntToStr(total));
       inc(n);
       Application.ProcessMessages;
-      saveRecordToRemote(qry, salvou);
+      saveRecordToRemote(qry, salvou, http);
+
       qry.Next;
     end;
     notifier.unflagSalvandoDadosServidor;
-    //dmPrincipal.commit;
     DataLog.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
   except
     DataLog.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
@@ -614,6 +629,8 @@ begin
   end;
   finally
     FreeAndNil(qry);
+    if criouHTTP and (http<>nil) then
+      FreeAndNil(http);
   end;
 end;
 

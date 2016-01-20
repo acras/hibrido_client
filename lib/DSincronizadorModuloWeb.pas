@@ -4,7 +4,7 @@ interface
 
 uses
   ActiveX, SysUtils, Classes, ExtCtrls, DIntegradorModuloWeb, Dialogs, Windows, IDataPrincipalUnit,
-    ISincronizacaoNotifierUnit;
+    ISincronizacaoNotifierUnit, IdHTTP;
 
 type
   TStepGettersEvent = procedure(name: string; step, total: integer) of object;
@@ -94,12 +94,18 @@ var
   i: integer;
   dm: IDataPrincipal;
   dmIntegrador: TDataIntegradorModuloWeb;
+  http: TIdHTTP;
 begin
+  http := nil;
   if gravandoVenda then exit;
   dm := getNewDataPrincipal;
   if dm.sincronizar then
   begin
     try try
+      http := TIdHTTP.Create(nil);
+      http.ProtocolVersion := pv1_1;
+      http.HTTPOptions := http.HTTPOptions + [hoKeepOrigProtocol];
+      http.Request.Connection := 'keep-alive';
       for i := 0 to length(posterDataModules)-1 do
       begin
         dmIntegrador := posterDataModules[i].Create(nil);
@@ -117,6 +123,9 @@ begin
     end;
     finally
       dm := nil;
+      if http <> nil then
+        FreeAndNil(http);
+
     end;
   end;
 end;
