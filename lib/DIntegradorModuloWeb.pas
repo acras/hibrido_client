@@ -174,6 +174,7 @@ begin
       begin
         notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
           '/' + IntToStr(numRegistros));
+        Application.ProcessMessages;
         node := list.item[i];
         if node<>nil then
           importRecord(node);
