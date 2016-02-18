@@ -122,7 +122,7 @@ type
     property notifier: ISincronizacaoNotifier read Fnotifier write Fnotifier;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
-    function getDadosAtualizados: TClientDataset;
+    procedure getDadosAtualizados;
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean): IXMLDomDocument2;
     procedure migrateTableToRemote(where: string = '');
     procedure migrateSingletonTableToRemote;
@@ -145,7 +145,7 @@ begin
   result := '';
 end;
 
-function TDataIntegradorModuloWeb.getDadosAtualizados: TClientDataset;
+procedure TDataIntegradorModuloWeb.getDadosAtualizados;
 var
   url, xmlContent: string;
   doc: IXMLDomDocument2;

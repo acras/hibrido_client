@@ -1,2 +1,4 @@
 *.ddp
 *.~ddp
+lib/__recovery
+__history

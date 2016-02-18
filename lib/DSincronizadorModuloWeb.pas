@@ -229,8 +229,6 @@ begin
     end;
   finally
     salvandoRetaguarda := false;
-    if notifier <> nil then
-      notifier.unflagSalvandoDadosServidor;
     Synchronize(finishPuttingProcess);
   end;
 end;
@@ -282,7 +280,8 @@ end;
 
 procedure TRunnerThreadPuters.finishPuttingProcess;
 begin
-  notifier.unflagSalvandoDadosServidor;
+  if notifier <> nil then
+    notifier.unflagSalvandoDadosServidor;
 end;
 
 procedure TRunnerThreadPuters.setMainFormPuttingTrue;
