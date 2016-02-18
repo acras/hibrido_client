@@ -4,7 +4,7 @@ interface
 
 uses
   ActiveX, SysUtils, Classes, ExtCtrls, DIntegradorModuloWeb, Dialogs, Windows, IDataPrincipalUnit,
-    ISincronizacaoNotifierUnit;
+    ISincronizacaoNotifierUnit, IdHTTP;
 
 type
   TStepGettersEvent = procedure(name: string; step, total: integer) of object;
@@ -75,7 +75,7 @@ var
 
 implementation
 
-uses ComObj, DLog;
+uses ComObj, DLog, acNetUtils;
 
 {$R *.dfm}
 
@@ -94,19 +94,22 @@ var
   i: integer;
   dm: IDataPrincipal;
   dmIntegrador: TDataIntegradorModuloWeb;
+  http: TIdHTTP;
 begin
+  http := nil;
   if gravandoVenda then exit;
   dm := getNewDataPrincipal;
   if dm.sincronizar then
   begin
     try try
+      http := getHTTPInstance;
       for i := 0 to length(posterDataModules)-1 do
       begin
         dmIntegrador := posterDataModules[i].Create(nil);
         try
           dmIntegrador.notifier := FNotifier;
           dmIntegrador.dmPrincipal := dm;
-          dmIntegrador.postRecordsToRemote;
+          dmIntegrador.postRecordsToRemote(http);
         finally
           FreeAndNil(dmIntegrador);
         end;
@@ -117,6 +120,9 @@ begin
     end;
     finally
       dm := nil;
+      if http <> nil then
+        FreeAndNil(http);
+
     end;
   end;
 end;
@@ -136,8 +142,10 @@ var
   i, j: integer;
   block: TServerToClientBlock;
   dm: IDataPrincipal;
+  http: TidHTTP;
 begin
   dm := getNewDataPrincipal;
+  http := getHTTPInstance;
   try
     for i := 0 to length(getterBlocks) - 1 do
     begin
@@ -150,7 +158,7 @@ begin
           begin
             notifier := self.notifier;
             dmPrincipal := dm;
-            getDadosAtualizados;
+            getDadosAtualizados(http);
             if Assigned(onStepGetters) then onStepGetters(block[j].className, i+1, length(getterBlocks));
             free;
           end;
@@ -162,6 +170,7 @@ begin
     end;
   finally
     dm := nil;
+    http := nil;
   end;
 end;
 
