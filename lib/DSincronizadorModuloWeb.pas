@@ -24,14 +24,13 @@ type
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
   public
     getterBlocks: TGetterBlocks;
-    procedure saveAllToRemote;
     procedure addPosterDataModule(dm: TDataIntegradorModuloWebClass);
     procedure addGetterBlock(getterBlock: TServerToClientBlock);
     procedure ativar;
     procedure desativar;
     procedure getUpdatedData;
     procedure threadedGetUpdatedData;
-    procedure threadedSaveAllToRemote;
+    procedure saveAllToRemote;
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
@@ -48,6 +47,7 @@ type
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
   protected
     procedure setMainFormGettingTrue;
+    procedure setMainFormGettingFalse;
     procedure finishGettingProcess;
     procedure Execute; override;
   end;
@@ -87,44 +87,6 @@ begin
   size := length(posterDataModules);
   SetLength(posterDataModules, size + 1);
   posterDataModules[size] := dm;
-end;
-
-procedure TDataSincronizadorModuloWeb.saveAllToRemote;
-var
-  i: integer;
-  dm: IDataPrincipal;
-  dmIntegrador: TDataIntegradorModuloWeb;
-  http: TIdHTTP;
-begin
-  http := nil;
-  if gravandoVenda then exit;
-  dm := getNewDataPrincipal;
-  if dm.sincronizar then
-  begin
-    try try
-      http := getHTTPInstance;
-      for i := 0 to length(posterDataModules)-1 do
-      begin
-        dmIntegrador := posterDataModules[i].Create(nil);
-        try
-          dmIntegrador.notifier := FNotifier;
-          dmIntegrador.dmPrincipal := dm;
-          dmIntegrador.postRecordsToRemote(http);
-        finally
-          FreeAndNil(dmIntegrador);
-        end;
-      end;
-    except
-      on e: Exception do
-        DataLog.log('Erros ao dar saveAllToRemote. Erro: ' + e.Message, 'Sync');
-    end;
-    finally
-      dm := nil;
-      if http <> nil then
-        FreeAndNil(http);
-
-    end;
-  end;
 end;
 
 procedure TDataSincronizadorModuloWeb.threadedGetUpdatedData;
@@ -223,6 +185,11 @@ end;
 { TRunnerThreadPuters }
 
 procedure TRunnerThreadPuters.Execute;
+var
+  i: integer;
+  dm: IDataPrincipal;
+  dmIntegrador: TDataIntegradorModuloWeb;
+  http: TIdHTTP;
 begin
   inherited;
   FreeOnTerminate := True;
@@ -232,7 +199,31 @@ begin
   try
     CoInitializeEx(nil, 0);
     try
-      sincronizador.saveAllToRemote;
+      http := nil;
+      if gravandoVenda then exit;
+      dm := sincronizador.getNewDataPrincipal;
+      try try
+        http := getHTTPInstance;
+        for i := 0 to length(sincronizador.posterDataModules)-1 do
+        begin
+          dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
+          try
+            dmIntegrador.notifier := FNotifier;
+            dmIntegrador.dmPrincipal := dm;
+            dmIntegrador.postRecordsToRemote(http);
+          finally
+            FreeAndNil(dmIntegrador);
+          end;
+        end;
+      except
+        on e: Exception do
+          DataLog.log('Erros ao dar saveAllToRemote. Erro: ' + e.Message, 'Sync');
+      end;
+      finally
+        dm := nil;
+        if http <> nil then
+          FreeAndNil(http);
+      end;
     finally
       CoUninitialize;
     end;
@@ -245,10 +236,10 @@ end;
 procedure TDataSincronizadorModuloWeb.sincronizaRetaguardaTimerTimer(
   Sender: TObject);
 begin
-  threadedSaveAllToRemote;
+  SaveAllToRemote;
 end;
 
-procedure TDataSincronizadorModuloWeb.threadedSaveAllToRemote;
+procedure TDataSincronizadorModuloWeb.SaveAllToRemote;
 var
   t: TRunnerThreadPuters;
 begin
@@ -278,7 +269,13 @@ begin
       block[j].updateDataSets;
     end;
   end;
-  notifier.unflagBuscandoDadosServidor;
+  setMainFormGettingFalse;
+end;
+
+procedure TRunnerThreadGetters.setMainFormGettingFalse;
+begin
+  if notifier <> nil then
+    notifier.unflagBuscandoDadosServidor;
 end;
 
 procedure TRunnerThreadGetters.setMainFormGettingTrue;

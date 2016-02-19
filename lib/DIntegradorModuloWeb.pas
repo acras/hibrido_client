@@ -122,7 +122,7 @@ type
     property notifier: ISincronizacaoNotifier read Fnotifier write Fnotifier;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
-    procedure getDadosAtualizados;
+    procedure getDadosAtualizados(http: TIdHTTP = nil);
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
     procedure migrateTableToRemote(where: string = '');
     procedure migrateSingletonTableToRemote;
@@ -145,7 +145,7 @@ begin
   result := '';
 end;
 
-procedure TDataIntegradorModuloWeb.getDadosAtualizados;
+procedure TDataIntegradorModuloWeb.getDadosAtualizados(http: TIdHTTP = nil);
 var
   url, xmlContent: string;
   doc: IXMLDomDocument2;
@@ -173,7 +173,6 @@ begin
       begin
         notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
           '/' + IntToStr(numRegistros));
-        Application.ProcessMessages;
         node := list.item[i];
         if node<>nil then
           importRecord(node);
@@ -616,9 +615,7 @@ begin
       notifier.setCustomMessage('Salvando ' + getHumanReadableName +
         ' ' + IntToStr(n) + '/' + IntToStr(total));
       inc(n);
-      Application.ProcessMessages;
       saveRecordToRemote(qry, salvou, http);
-
       qry.Next;
     end;
     notifier.unflagSalvandoDadosServidor;

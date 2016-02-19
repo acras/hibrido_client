@@ -4,7 +4,7 @@ object DataSincronizadorModuloWeb: TDataSincronizadorModuloWeb
   Height = 255
   Width = 443
   object sincronizaRetaguardaTimer: TTimer
-    Interval = 900000
+    Interval = 60000
     OnTimer = sincronizaRetaguardaTimerTimer
     Left = 144
     Top = 24
