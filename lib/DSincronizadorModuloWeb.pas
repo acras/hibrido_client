@@ -30,7 +30,7 @@ type
     procedure desativar;
     procedure getUpdatedData;
     procedure threadedGetUpdatedData;
-    procedure saveAllToRemote;
+    procedure saveAllToRemote(wait: boolean = false);
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
@@ -192,7 +192,6 @@ var
   http: TIdHTTP;
 begin
   inherited;
-  FreeOnTerminate := True;
   if salvandoRetaguarda or gravandoVenda then exit;
   Synchronize(setMainFormPuttingTrue);
   salvandoRetaguarda := true;
@@ -239,14 +238,20 @@ begin
   SaveAllToRemote;
 end;
 
-procedure TDataSincronizadorModuloWeb.SaveAllToRemote;
+procedure TDataSincronizadorModuloWeb.SaveAllToRemote(wait: boolean = false);
 var
   t: TRunnerThreadPuters;
 begin
   t := TRunnerThreadPuters.Create(true);
   t.sincronizador := self;
   t.notifier := notifier;
+  t.FreeOnTerminate := not wait;
   t.Resume;
+  if wait then
+  begin
+    t.WaitFor;
+    FreeAndNil(t);
+  end;
 end;
 
 procedure TDataSincronizadorModuloWeb.SetonStepGetters(
