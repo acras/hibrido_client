@@ -128,6 +128,7 @@ type
     procedure migrateSingletonTableToRemote;
     procedure postRecordsToRemote(http: TidHTTP = nil);
     class procedure updateDataSets; virtual;
+    procedure afterDadosAtualizados; virtual;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -180,6 +181,7 @@ begin
     end;
     keepImporting := (maxRecords > 0) and (numRegistros >= maxRecords);
   end;
+  afterDadosAtualizados;
 end;
 
 function TDataIntegradorModuloWeb.getHumanReadableName: string;
@@ -415,6 +417,11 @@ begin
       params.Add(nome + '=' + valor);
     end;
   end;
+end;
+
+procedure TDataIntegradorModuloWeb.afterDadosAtualizados;
+begin
+  //
 end;
 
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
