@@ -115,7 +115,6 @@ type
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
     function maxRecords: integer; virtual;
-    function getHumanReadableName: string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -126,9 +125,10 @@ type
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
     procedure migrateTableToRemote(where: string = '');
     procedure migrateSingletonTableToRemote;
-    procedure postRecordsToRemote(http: TidHTTP = nil);
+    procedure postRecordsToRemote(http: TidHTTP = nil); virtual;
     class procedure updateDataSets; virtual;
     procedure afterDadosAtualizados; virtual;
+    function getHumanReadableName: string; virtual;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -159,7 +159,8 @@ begin
   while keepImporting do
   begin
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
-    notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
+    if notifier <> nil then
+      notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
     numRegistros := 0;
     xmlContent := getRemoteXmlContent(url, http);
 
@@ -169,10 +170,12 @@ begin
       doc.loadXML(xmlContent);
       list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
       numRegistros := list.length;
-      notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
+      if notifier <> nil then
+        notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
       for i := 0 to numRegistros-1 do
       begin
-        notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
+        if notifier <> nil then
+          notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
           '/' + IntToStr(numRegistros));
         node := list.item[i];
         if node<>nil then
@@ -485,9 +488,9 @@ begin
               zipper.ForceType := true;
               zipper.Stream := zippedParams;
               zipper.AddFromStream('', strs);
-              DataLog.log('Pré post da NFCe', 'NFCe');
+              DataLog.log('Pré post do registro', 'TDataIntegradorModuloWeb');
               xmlContent := http.Post(url, zippedParams);
-              DataLog.log('Pós post da NFCe', 'NFCe');
+              DataLog.log('Pós post do registro', 'TDataIntegradorModuloWeb');
             finally
               freeAndNil(zipper);
               freeAndNil(zippedParams);
@@ -619,13 +622,15 @@ begin
     qry.First;
     while not qry.Eof do
     begin
-      notifier.setCustomMessage('Salvando ' + getHumanReadableName +
-        ' ' + IntToStr(n) + '/' + IntToStr(total));
+      if notifier <> nil then
+        notifier.setCustomMessage('Salvando ' + getHumanReadableName +
+          ' ' + IntToStr(n) + '/' + IntToStr(total));
       inc(n);
       saveRecordToRemote(qry, salvou, http);
       qry.Next;
     end;
-    notifier.unflagSalvandoDadosServidor;
+    if notifier <> nil then
+      notifier.unflagSalvandoDadosServidor;
     DataLog.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
   except
     DataLog.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');

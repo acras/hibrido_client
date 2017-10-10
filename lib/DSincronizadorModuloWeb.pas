@@ -30,7 +30,7 @@ type
     procedure desativar;
     procedure getUpdatedData;
     procedure threadedGetUpdatedData;
-    procedure saveAllToRemote(wait: boolean = false);
+    procedure saveAllToRemote(wait: boolean = false); virtual;
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
@@ -121,7 +121,7 @@ begin
             notifier := self.notifier;
             dmPrincipal := dm;
             getDadosAtualizados(http);
-            if Assigned(onStepGetters) then onStepGetters(block[j].className, i+1, length(getterBlocks));
+            if Assigned(onStepGetters) then onStepGetters(getHumanReadableName, i+1, length(getterBlocks));
             free;
           end;
         end;
