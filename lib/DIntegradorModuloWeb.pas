@@ -8,7 +8,7 @@ uses
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc,
-  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc;
+  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, DLog;
 
 type
   EIntegradorException = class(Exception)
@@ -54,6 +54,7 @@ type
   private
     FdmPrincipal: IDataPrincipal;
     Fnotifier: ISincronizacaoNotifier;
+    FDataLog: TDataLog;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -61,6 +62,8 @@ type
       params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
     function GetErrorMessage(const aXML: string): string;
+    procedure SetDataLog(const Value: TDataLog);
+    procedure Log(const aLog, aClasse: string);
   protected
     nomeTabela: string;
     nomeSingular: string;
@@ -134,6 +137,7 @@ type
     class procedure updateDataSets; virtual;
     procedure afterDadosAtualizados; virtual;
     function getHumanReadableName: string; virtual;
+    property DataLog: TDataLog read FDataLog write SetDataLog;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -142,7 +146,7 @@ var
   DataIntegradorModuloWeb: TDataIntegradorModuloWeb;
 implementation
 
-uses AguardeFormUn, ComObj, DLog;
+uses AguardeFormUn, ComObj;
 
 {$R *.dfm}
 
@@ -450,7 +454,7 @@ var
   criouHttp: boolean;
   log: string;
 begin
-  DataLog.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
+  Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   criouHTTP := false;
   if http = nil then
@@ -494,9 +498,9 @@ begin
               zipper.ForceType := true;
               zipper.Stream := zippedParams;
               zipper.AddFromStream('', strs);
-              DataLog.log('Pré post do registro', 'TDataIntegradorModuloWeb');
+              Self.log('Pré post do registro', 'TDataIntegradorModuloWeb');
               xmlContent := http.Post(url, zippedParams);
-              DataLog.log('Pós post do registro', 'TDataIntegradorModuloWeb');
+              Self.log('Pós post do registro', 'TDataIntegradorModuloWeb');
             finally
               freeAndNil(zipper);
               freeAndNil(zippedParams);
@@ -546,13 +550,13 @@ begin
           else
             log :=  Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: %s.',[ClassName, e.ErrorCode, e.ErrorMessage]);
 
-          DataLog.log(log, 'Sync');
+          Self.log(log, 'Sync');
           raise EIntegradorException.Create(log) ; //Logou, agora manda pra cima
         end;
         on E: Exception do
         begin
           log := 'Erro ao tentar salvar registro. Classe: ' + ClassName + '. Erro: ' + e.Message;
-          DataLog.log(log, 'Sync');
+          Self.log(log, 'Sync');
           raise EIntegradorException.Create(log) ;
         end;
       end;
@@ -563,6 +567,17 @@ begin
       FreeAndNil(http);
     FreeAndNil(params);
   end;
+end;
+
+procedure TDataIntegradorModuloWeb.Log(const aLog, aClasse: string);
+begin
+  if (FDataLog <> nil) then
+    FDataLog.log(aLog, aClasse);
+end;
+
+procedure TDataIntegradorModuloWeb.SetDataLog(const Value: TDataLog);
+begin
+  FDataLog := Value;
 end;
 
 function TDataIntegradorModuloWeb.GetErrorMessage(const aXML: string): string;
@@ -650,7 +665,7 @@ var
 begin
   qry := dmPrincipal.getQuery;
   try try
-    DataLog.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
+    Self.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
     qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
       + getAdditionalSaveConditions;
     qry.Open;
@@ -677,9 +692,9 @@ begin
     end;
     if notifier <> nil then
       notifier.unflagSalvandoDadosServidor;
-    DataLog.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
+    Self.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
   except
-    DataLog.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
+    Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
     raise;
   end;
   finally
@@ -1027,13 +1042,6 @@ begin
   //nothing to add here
 end;
 
-{ TTabelaDetalhe }
-
-constructor TTabelaDetalhe.create;
-begin
-  translations := TTranslationSet.create(nil);
-end;
-
 procedure TDataIntegradorModuloWeb.SetdmPrincipal(
   const Value: IDataPrincipal);
 begin
@@ -1063,6 +1071,13 @@ function TDataIntegradorModuloWeb.gerenciaRedirecionamentos(idLocal,
   idRemoto: integer): boolean;
 begin
   result := false;
+end;
+
+{ TTabelaDetalhe }
+
+constructor TTabelaDetalhe.create;
+begin
+  translations := TTranslationSet.create(nil);
 end;
 
 end.
