@@ -7,9 +7,13 @@ uses
   DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection, forms,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
-  ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc;
+  ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc,
+  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc;
 
 type
+  EIntegradorException = class(Exception)
+  end;
+
   TNameTranslation = record
     server: string;
     pdv: string;
@@ -56,6 +60,7 @@ type
     procedure addTabelaDetalheParams(valorPK: integer;
       params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
+    function GetErrorMessage(const aXML: string): string;
   protected
     nomeTabela: string;
     nomeSingular: string;
@@ -443,6 +448,7 @@ var
   url, s: string;
   a,b: cardinal;
   criouHttp: boolean;
+  log: string;
 begin
   DataLog.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
@@ -531,11 +537,23 @@ begin
           end;
         end;
       except
-        on e: Exception do
+        on e: EIdHTTPProtocolException do
         begin
-          DataLog.log('Erro ao tentar salvar registro. Classe: ' + ClassName +
-            '. Erro: ' + e.Message, 'Sync');
-          raise; //Logou, agora manda pra cima
+          if e.ErrorCode = 422 then
+            log := Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d, Erro: %s.',[ClassName, e.ErrorCode, Self.GetErrorMessage(e.ErrorMessage)])
+          else if e.ErrorCode = 500 then
+            log := Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: Erro interno no servidor. ',[ClassName, e.ErrorCode])
+          else
+            log :=  Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: %s.',[ClassName, e.ErrorCode, e.ErrorMessage]);
+
+          DataLog.log(log, 'Sync');
+          raise EIntegradorException.Create(log) ; //Logou, agora manda pra cima
+        end;
+        on E: Exception do
+        begin
+          log := 'Erro ao tentar salvar registro. Classe: ' + ClassName + '. Erro: ' + e.Message;
+          DataLog.log(log, 'Sync');
+          raise EIntegradorException.Create(log) ;
         end;
       end;
     end;
@@ -546,6 +564,34 @@ begin
     FreeAndNil(params);
   end;
 end;
+
+function TDataIntegradorModuloWeb.GetErrorMessage(const aXML: string): string;
+var
+  node: IXMLNode;
+  list: IXMLNodeList;
+  XML: IXMLDocument;
+begin
+  Result := EmptyStr;
+  CoInitialize(nil);
+  XML := TXMLDocument.Create(Self);
+  try
+    XML.LoadFromXML(aXML);
+    list := XML.ChildNodes;
+    if list.FindNode('errors') <> nil then
+    begin
+      list := list.FindNode('errors').ChildNodes;
+      if list <> nil  then
+      begin
+        node := list.FindNode('error');
+        if node <> nil then
+          Result := node.Text;
+      end;
+    end;
+  finally
+    CoUninitialize;
+  end;
+end;
+
 
 procedure TDataIntegradorModuloWeb.addDetails(ds: TDataSet; params: TStringList);
 var
