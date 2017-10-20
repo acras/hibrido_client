@@ -18,6 +18,7 @@ type
     server: string;
     pdv: string;
     lookupRemoteTable: string;
+    fkName: string;
   end;
 
   TTranslationSet = class
@@ -26,7 +27,7 @@ type
     public
       constructor create(owner: TComponent);
       procedure add(serverName, pdvName: string;
-        lookupRemoteTable: string = '');
+        lookupRemoteTable: string = ''; fkName: string = '');
       function translateServerToPDV(serverName: string; duasVias: boolean): string;
       function translatePDVToServer(pdvName: string): string;
       function size: integer;
@@ -95,7 +96,7 @@ type
     function translateTypeValue(fieldType, fieldValue: string): string;
     function translateValueToServer(translation: TNameTranslation;
       fieldName: string; field: TField;
-      nestedAttribute: string = ''): string; virtual;
+      nestedAttribute: string = ''; fkName: string = ''): string; virtual;
     function translateValueFromServer(fieldName, value: string): string; virtual;
     procedure redirectRecord(idAntigo, idNovo: integer);
     function getFieldAdditionalList(node: IXMLDomNode): string; virtual;
@@ -424,7 +425,7 @@ begin
       nome := nomeSingularSave + nestingText + '[' + translations.get(i).server + ']';
       valor :=
         translateValueToServer(translations.get(i), translations.get(i).pdv,
-          ds.fieldByName(translations.get(i).pdv), nestedAttribute);
+          ds.fieldByName(translations.get(i).pdv), nestedAttribute, translations.get(i).fkName);
       //params.Add(nome + '=' + TIdURI.ParamsEncode(valor));
       params.Add(nome + '=' + valor);
     end;
@@ -750,7 +751,7 @@ end;
 { TTranslationSet }
 
 procedure TTranslationSet.add(serverName, pdvName: string;
-  lookupRemoteTable: string = '');
+  lookupRemoteTable: string = ''; fkName: string = '');
 var
   tam: integer;
 begin
@@ -759,6 +760,7 @@ begin
   translations[tam].server := serverName;
   translations[tam].pdv := pdvName;
   translations[tam].lookupRemoteTable := lookupRemoteTable;
+  translations[tam].fkName := fkName;
 end;
 
 procedure TDataIntegradorModuloWeb.beforeRedirectRecord(idAntigo, idNovo: integer);
@@ -829,17 +831,22 @@ begin
 end;
 
 function TDataIntegradorModuloWeb.translateValueToServer(translation: TNameTranslation;
-  fieldName: string; field: TField; nestedAttribute: string = ''): string;
+  fieldName: string; field: TField; nestedAttribute: string = ''; fkName: string = ''): string;
 var
   lookupIdRemoto: integer;
+  fk: string;
 begin
   if translation.lookupRemoteTable <> '' then
   begin
     if field.AsInteger > 0 then
     begin
+      if fkName = '' then
+        fk := translation.pdv
+      else
+        fk := fkName;
       lookupIdRemoto := dmPrincipal.getSQLIntegerResult('SELECT idRemoto FROM ' +
         translation.lookupRemoteTable +
-        ' WHERE ' + translation.pdv + ' = ' + field.AsString);
+        ' WHERE ' + fk + ' = ' + field.AsString);
       if lookupIdRemoto > 0 then
         result := IntToStr(lookupIdRemoto)
       else
