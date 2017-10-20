@@ -449,20 +449,20 @@ var
   multipartParams: TidMultipartFormDataStream;
   xmlContent: string;
   doc: IXMLDomDocument2;
-  i, idRemoto: integer;
-  nome, nomeCampo, valor, txtUpdate: string;
+  idRemoto: integer;
+  txtUpdate: string;
   sucesso: boolean;
   strs, stream: TStringStream;
   zippedParams: TMemoryStream;
   zipper: TAbZipper;
-  url, s: string;
-  a,b: cardinal;
+  url: string;
   criouHttp: boolean;
   log: string;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   criouHTTP := false;
+  idRemoto := 0;
   if http = nil then
   begin
     criouHTTP := true;
@@ -680,45 +680,46 @@ var
   n, total: integer;
   criouHTTP: boolean;
 begin
+  criouHTTP := false;
   qry := dmPrincipal.getQuery;
-  try try
-    Self.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
-    qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
-      + getAdditionalSaveConditions;
-    qry.Open;
-    total := qry.RecordCount;
-    n := 1;
-    criouHTTP := false;
-    if http = nil then
-    begin
-      criouHTTP := true;
-      http := TIdHTTP.Create(nil);
-      http.ProtocolVersion := pv1_1;
-      http.HTTPOptions := http.HTTPOptions + [hoKeepOrigProtocol];
-      http.Request.Connection := 'keep-alive';
-    end;
-    qry.First;
-    while not qry.Eof do
-    begin
-      if notifier <> nil then
+  try
+    try
+      Self.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
+      qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
+        + getAdditionalSaveConditions;
+      qry.Open;
+      total := qry.RecordCount;
+      n := 1;
+      if http = nil then
       begin
-        if (not notifier.getShouldContinue) then
-          break;
-
-        notifier.setCustomMessage('Salvando ' + getHumanReadableName +
-          ' ' + IntToStr(n) + '/' + IntToStr(total));
+        criouHTTP := true;
+        http := TIdHTTP.Create(nil);
+        http.ProtocolVersion := pv1_1;
+        http.HTTPOptions := http.HTTPOptions + [hoKeepOrigProtocol];
+        http.Request.Connection := 'keep-alive';
       end;
-      inc(n);
-      saveRecordToRemote(qry, salvou, http);
-      qry.Next;
+      qry.First;
+      while not qry.Eof do
+      begin
+        if notifier <> nil then
+        begin
+          if (not notifier.getShouldContinue) then
+            break;
+
+          notifier.setCustomMessage('Salvando ' + getHumanReadableName +
+            ' ' + IntToStr(n) + '/' + IntToStr(total));
+        end;
+        inc(n);
+        saveRecordToRemote(qry, salvou, http);
+        qry.Next;
+      end;
+      if notifier <> nil then
+        notifier.unflagSalvandoDadosServidor;
+      Self.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
+    except
+      Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
+      raise;
     end;
-    if notifier <> nil then
-      notifier.unflagSalvandoDadosServidor;
-    Self.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
-  except
-    Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
-    raise;
-  end;
   finally
     FreeAndNil(qry);
     if criouHTTP and (http<>nil) then
