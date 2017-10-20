@@ -137,6 +137,7 @@ type
     procedure afterDadosAtualizados; virtual;
     function getHumanReadableName: string; virtual;
     property DataLog: TDataLog read FDataLog write SetDataLog;
+    destructor Destroy; override;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -819,6 +820,15 @@ begin
   zippedPost := true;
 end;
 
+
+destructor TDataIntegradorModuloWeb.Destroy;
+var
+  i: integer;
+begin
+  for i := Low(Self.tabelasDetalhe) to High(Self.tabelasDetalhe) do
+     Self.tabelasDetalhe[i].Free;
+  inherited;
+end;
 
 function TDataIntegradorModuloWeb.translateValueToServer(translation: TNameTranslation;
   fieldName: string; field: TField; nestedAttribute: string = ''): string;
