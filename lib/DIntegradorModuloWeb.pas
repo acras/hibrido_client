@@ -695,8 +695,13 @@ begin
     while not qry.Eof do
     begin
       if notifier <> nil then
+      begin
+        if (not notifier.getShouldContinue) then
+          break;
+
         notifier.setCustomMessage('Salvando ' + getHumanReadableName +
           ' ' + IntToStr(n) + '/' + IntToStr(total));
+      end;
       inc(n);
       saveRecordToRemote(qry, salvou, http);
       qry.Next;

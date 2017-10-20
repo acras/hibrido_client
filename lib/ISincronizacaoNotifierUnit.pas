@@ -10,6 +10,7 @@ ISincronizacaoNotifier = interface
   procedure flagBuscandoDadosServidor;
   procedure unflagBuscandoDadosServidor;
   procedure setCustomMessage(content: string);
+  function getShouldContinue: boolean;
 end;
 
 implementation

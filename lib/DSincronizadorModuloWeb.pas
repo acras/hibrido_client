@@ -201,23 +201,26 @@ begin
       http := nil;
       if gravandoVenda then exit;
       dm := sincronizador.getNewDataPrincipal;
-      try try
-        http := getHTTPInstance;
-        for i := 0 to length(sincronizador.posterDataModules)-1 do
-        begin
-          dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
-          try
-            dmIntegrador.notifier := FNotifier;
-            dmIntegrador.dmPrincipal := dm;
-            dmIntegrador.postRecordsToRemote(http);
-          finally
-            FreeAndNil(dmIntegrador);
+      try
+        try
+          http := getHTTPInstance;
+          for i := 0 to length(sincronizador.posterDataModules)-1 do
+          begin
+            if (Self.Fnotifier <> nil) and (not Self.Fnotifier.getShouldContinue) then
+              Break;
+            dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
+            try
+              dmIntegrador.notifier := FNotifier;
+              dmIntegrador.dmPrincipal := dm;
+              dmIntegrador.postRecordsToRemote(http);
+            finally
+              FreeAndNil(dmIntegrador);
+            end;
           end;
+        except
+          on e: Exception do
+            DataLog.log('Erros ao dar saveAllToRemote. Erro: ' + e.Message, 'Sync');
         end;
-      except
-        on e: Exception do
-          DataLog.log('Erros ao dar saveAllToRemote. Erro: ' + e.Message, 'Sync');
-      end;
       finally
         dm := nil;
         if http <> nil then
