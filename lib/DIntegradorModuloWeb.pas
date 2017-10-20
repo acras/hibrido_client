@@ -97,7 +97,6 @@ type
       fieldName: string; field: TField;
       nestedAttribute: string = ''): string; virtual;
     function translateValueFromServer(fieldName, value: string): string; virtual;
-    procedure duplicarRegistroSemOffset(ds: TDataSet);
     procedure redirectRecord(idAntigo, idNovo: integer);
     function getFieldAdditionalList(node: IXMLDomNode): string; virtual;
     function getFieldAdditionalValues(node: IXMLDomNode): string; virtual;
@@ -132,7 +131,6 @@ type
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     procedure getDadosAtualizados(http: TIdHTTP = nil);
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
-    procedure migrateTableToRemote(where: string = '');
     procedure migrateSingletonTableToRemote;
     procedure postRecordsToRemote(http: TidHTTP = nil); virtual;
     class procedure updateDataSets; virtual;
@@ -717,92 +715,6 @@ begin
   end;
 end;
 
-procedure TDataIntegradorModuloWeb.migrateTableToRemote(where: string = '');
-var
-  qry: TSQLDataSet;
-  doc: IXMLDomDocument2;
-  list : IXMLDomNodeList;
-  node : IXMLDomNode;
-  idRemoto: integer;
-  salvou: boolean;
-  log: TextFile;
-begin
-  offset := dmPrincipal.getSQLIntegerResult('SELECT max(' + nomePKLocal + ' + 1) from ' +
-    nomeTabela + ' ');
-  qry := dmPrincipal.getQuery;
-  qry.CommandText := 'SELECT * from ' + nomeTabela + ' where ' + nomePKLocal + ' = :' + nomePKLocal;;
-  dmPrincipal.startTransaction;
-  try
-    qry.commandText := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + getOrderBy;
-    qry.Open;
-    qry.First;
-    AguardeForm.total := qry.RecordCount;
-    AguardeForm.current := 1;
-    AguardeForm.mostrar('Migrando para a web ' + nomeTabela,0,0,true);
-    ReWrite(log);
-
-    while not qry.Eof do
-    begin
-      qry.Refresh;
-      try
-        doc := saveRecordToRemote(qry, salvou);
-        if salvou and not(duasVias) then
-        begin
-          //no resp virá o id e os dados, devemos salvar porém com o id somado
-          idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text);
-          doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text :=
-            IntToStr(idRemoto + offset);
-          importRecord(doc.selectSingleNode('//' + dasherize(nomeSingularSave)));
-          redirectRecord(qry.FieldByName(nomePKLocal).AsInteger, idRemoto + offset);
-          Writeln(log, 'Redirecionando. De ' + qry.FieldByName(nomePKLocal).asString + ' -> ' + intToStr(idRemoto + offset));
-        end;
-      except
-        //se der erro ao salvar um registro eu vou redirecionar para outro id, por exemplo
-        //  em um produto eu posso redirecionar para um produto padrão, genérico, que será
-        //  usado para este fim.
-        write(log, 'Erro no item ' + qry.fieldByName(nomePKLocal).asString);
-
-      end;
-
-      qry.Next;
-      AguardeForm.current := AguardeForm.current + 1;
-    end;
-    dmPrincipal.commit;
-    AguardeForm.esconder;
-    if not(duasVias) then
-    begin
-      //Segunda passada. Agora com o espaço liberado e os registros já semi-integrados
-      //ao remoto, faltando apenas o ajuste do id
-      qry.close;
-      qry.commandText := 'SELECT * from ' + nomeTabela + ' ' + where + ' order by ' + nomePKLocal;
-      qry.Open;
-      AguardeForm.total := qry.RecordCount;
-      AguardeForm.current := 0;
-      AguardeForm.mostrar('Corrigindo ids. Esta operação poder ser bastante demorada.', 0, 0, true);
-      qry.First;
-      Writeln(log, '--Iniciando duplicação de volta, sem offset. Offset: ' + inttostr(offset));
-      while not qry.Eof do
-      begin
-        qry.Refresh;
-        //tira o offset e insere
-        try
-          Write(log, 'id: ' + qry.fieldByName(nomePKLocal).asString);
-          duplicarRegistroSemOffset(qry);
-          AguardeForm.current := AguardeForm.current + 1;
-          WriteLn(log, '... ok');
-        except
-          WriteLn(log, '... erro');
-        end;
-        Flush(log);
-        qry.Next;
-      end;
-    end;
-  finally
-    dmPrincipal.commit;
-    FreeAndNil(qry);
-  end;
-end;
-
 procedure TDataIntegradorModuloWeb.redirectRecord(idAntigo, idNovo: integer);
 var
   i: integer;
@@ -823,43 +735,6 @@ begin
   //E então apagar o registro original
   dmPrincipal.execSQL('DELETE FROM ' + nomeTabela + ' where ' +
     nomePKLocal + ' = ' + IntToStr(idAntigo));
-end;
-
-procedure TDataIntegradorModuloWeb.duplicarRegistroSemOffset(ds: TDataSet);
-var
-  qry: TSQLDataSet;
-  i: integer;
-begin
-  qry := dmPrincipal.getQuery;
-  try
-    qry.commandText := 'INSERT INTO ' + nomeTabela + '(';
-    for i := 0 to ds.fieldCount -1 do
-    begin
-      qry.commandText := qry.commandText + ds.Fields[i].FieldName;
-      if i < ds.fieldCount -1 then
-        qry.commandText := qry.commandText + ', ';
-    end;
-    qry.commandText := qry.commandText + ') values (';
-    for i := 0 to ds.fieldCount -1 do
-    begin
-      qry.commandText := qry.commandText + ':' + ds.Fields[i].FieldName;
-      if i < ds.fieldCount -1 then
-        qry.commandText := qry.commandText + ', ';
-    end;
-    qry.commandText := qry.commandText + ')';
-    for i := 0 to ds.fieldCount -1 do
-    begin
-      if uppercase(ds.Fields[i].FieldName) = uppercase(nomePKLocal) then
-        qry.ParamByName(nomePKLocal).Value := ds.Fields[i].AsInteger - offset
-      else
-        qry.ParamByName(ds.Fields[i].FieldName).Value := ds.Fields[i].Value;
-    end;
-    qry.ExecSQL;
-    redirectRecord(ds.FieldByName(nomePKLocal).AsInteger, ds.FieldByName(nomePKLocal).AsInteger - offset);
-    dmPrincipal.commit;
-  finally
-    FreeAndNil(qry);
-  end;
 end;
 
 { TTranslationSet }
