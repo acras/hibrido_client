@@ -123,6 +123,7 @@ type
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
     function maxRecords: integer; virtual;
+    function getTimeoutValue: integer; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -436,6 +437,11 @@ begin
   //
 end;
 
+function TDataIntegradorModuloWeb.getTimeoutValue: integer;
+begin
+  Result := 30000;
+end;
+
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
   var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
 var
@@ -461,6 +467,8 @@ begin
   begin
     criouHTTP := true;
     http := getHTTPInstance;
+    http.ConnectTimeout := Self.getTimeoutValue;
+    http.ReadTimeout := Self.getTimeoutValue;
   end;
   params := TStringList.Create;
   multiPartParams := TIdMultiPartFormDataStream.Create;
@@ -512,13 +520,18 @@ begin
           end;
         end;
         sucesso := true;
-        {$IFDEF VER150}
-        doc := CoDOMDocument.Create;
-        {$ELSE}
-        doc := CoDOMDocument60.Create;
-        {$ENDIF}
-        doc.loadXML(xmlContent);
-        result := doc;
+        CoInitialize(nil);
+        try
+          {$IFDEF VER150}
+          doc := CoDOMDocument.Create;
+          {$ELSE}
+          doc := CoDOMDocument60.Create;
+          {$ENDIF}
+          doc.loadXML(xmlContent);
+          result := doc;
+        finally
+          CoUninitialize;
+        end;
         if duasVias or clientToServer then
         begin
           txtUpdate := 'UPDATE ' + nomeTabela + ' SET salvouRetaguarda = ' + QuotedStr('S');
