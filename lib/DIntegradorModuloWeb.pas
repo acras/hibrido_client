@@ -45,6 +45,8 @@ type
     nomeFK: string;
     nomePK: string;
     nomeParametro: string;
+    nomeSingularDetalhe : string;
+    nomePluralDetalhe : string;
     tabelasDetalhe: array of TTabelaDetalhe;
     translations: TTranslationSet;
     constructor create;
@@ -65,6 +67,7 @@ type
     function GetErrorMessage(const aXML: string): string;
     procedure SetDataLog(const Value: TDataLog);
     procedure Log(const aLog, aClasse: string);
+    procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
   protected
     nomeTabela: string;
     nomeSingular: string;
@@ -125,6 +128,7 @@ type
     function maxRecords: integer; virtual;
     function getTimeoutValue: integer; virtual;
     function getDateFormat: String; virtual;
+    function getAdditionalDetailFilter:String; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -258,6 +262,47 @@ begin
     dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE idRemoto = ' + IntToStr(id), 3)
   else
     dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id), 3);
+end;
+
+procedure TDataIntegradorModuloWeb.UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
+var
+   i,j : integer;
+   vNode : IXMLDomNode;
+   vNodeList, List: IXMLDOMNodeList;
+   vIdRemoto, vPkLocal : String;
+   vNomePlural, vNomeSingular: string;
+begin
+  try
+    for i := low(pTabelasDetalhe) to high(pTabelasDetalhe) do
+    begin
+      vNomePlural := pTabelasDetalhe[i].nomePluralDetalhe;
+      vNomeSingular := pTabelasDetalhe[i].nomeSingularDetalhe;
+
+      if VNomePlural = EmptyStr then
+        raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomePluralDetalhe',[Self.ClassName]);
+
+      if vNomeSingular = EmptyStr then
+        raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomeSingularDetalhe',[Self.ClassName]);
+
+      vNode := pNode.selectSingleNode('./' + dasherize(vNomePlural));
+      vNodeList := vNode.selectNodes('./' + dasherize(vNomeSingular));
+
+      for j := 0 to vNodeList.length - 1 do
+      begin
+        vIdRemoto := vNodeList[j].selectSingleNode('./id').text;
+        vPkLocal := vNodeList[j].selectSingleNode('./original-id').text;
+
+        if duasVias then
+          dmPrincipal.execSQL('UPDATE ' + pTabelasDetalhe[i].nomeTabela + ' SET salvouRetaguarda = ' +
+                          QuotedStr('S') + ', idRemoto = ' + vIdRemoto +
+                          ' WHERE salvouRetaguarda = ''N'' and ' + pTabelasDetalhe[i].nomePK + ' = ' + vPkLocal) ;
+      end;
+      if Length(pTabelasDetalhe[i].tabelasDetalhe) > 0 then
+         Self.UpdateRecordDetalhe(vNode, pTabelasDetalhe[i].tabelasDetalhe);
+    end;
+  except
+    raise;
+  end;
 end;
 
 procedure TDataIntegradorModuloWeb.updateSingletonRecord(node: IXMLDOMNode);
@@ -557,6 +602,10 @@ begin
             dmPrincipal.execSQL(txtUpdate);
             dmPrincipal.commit;
           end;
+
+          if Length(TabelasDetalhe) > 0 then
+             Self.UpdateRecordDetalhe(doc.selectSingleNode(dasherize(nomeSingularSave)), TabelasDetalhe);
+
         end;
       except
         on e: EIdHTTPProtocolException do
@@ -644,7 +693,7 @@ begin
   qry := dmPrincipal.getQuery;
   try
     qry.commandText := 'SELECT * FROM ' + tabelaDetalhe.nomeTabela + ' where ' + tabelaDetalhe.nomeFK +
-      ' = ' + IntToStr(valorPK);
+      ' = ' + IntToStr(valorPK) + self.getAdditionalDetailFilter;
     qry.Open;
     while not qry.Eof do
     begin
@@ -656,6 +705,11 @@ begin
   finally
     FreeAndNil(qry);
   end;
+end;
+
+function TDataIntegradorModuloWeb.getAdditionalDetailFilter: String;
+begin
+  Result := EmptyStr;
 end;
 
 procedure TDataIntegradorModuloWeb.migrateSingletonTableToRemote;
