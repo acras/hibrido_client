@@ -124,6 +124,7 @@ type
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
     function maxRecords: integer; virtual;
     function getTimeoutValue: integer; virtual;
+    function getDateFormat: String; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -839,7 +840,7 @@ var
 begin
   if translation.lookupRemoteTable <> '' then
   begin
-    if field.AsInteger > 0 then
+    if Trim(field.asString) <> EmptyStr then
     begin
       if fkName = '' then
         fk := translation.pdv
@@ -886,7 +887,7 @@ begin
         result := 'NULL'
       else
         //result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', field.AsDateTime);
-        result := FormatDateTime('dd"/"mm"/"yyyy"T"hh":"nn":"ss', field.AsDateTime);
+        result := FormatDateTime(Self.getDateFormat , field.AsDateTime);
     end
     else if field.DataType in [ftDate] then
     begin
@@ -898,6 +899,11 @@ begin
     else
       result := field.asString;
   end;
+end;
+
+function TDataIntegradorModuloWeb.getDateFormat: String;
+begin
+  Result := 'dd"/"mm"/"yyyy"T"hh":"nn":"ss'
 end;
 
 function TDataIntegradorModuloWeb.translateValueFromServer(fieldName,
