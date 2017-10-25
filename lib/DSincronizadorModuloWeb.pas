@@ -193,7 +193,7 @@ var
 begin
   inherited;
   if salvandoRetaguarda or gravandoVenda then exit;
-  Synchronize(setMainFormPuttingTrue);
+  setMainFormPuttingTrue;
   salvandoRetaguarda := true;
   try
     CoInitializeEx(nil, 0);
@@ -249,7 +249,7 @@ begin
   t.sincronizador := self;
   t.notifier := notifier;
   t.FreeOnTerminate := not wait;
-  t.Resume;
+  t.Start;
   if wait then
   begin
     t.WaitFor;
@@ -300,7 +300,8 @@ end;
 
 procedure TRunnerThreadPuters.setMainFormPuttingTrue;
 begin
-  notifier.flagSalvandoDadosServidor;
+  if FNotifier <> nil then
+    FNotifier.flagSalvandoDadosServidor;
 end;
 
 procedure TRunnerThreadPuters.Setnotifier(
