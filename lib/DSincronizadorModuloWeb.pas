@@ -219,7 +219,7 @@ var
 begin
   inherited;
   if salvandoRetaguarda or gravandoVenda then exit;
-  if Self.FthreadControl = nil then
+  if notifier <> nil then
     Synchronize(setMainFormPuttingTrue);
   salvandoRetaguarda := true;
   try
@@ -285,6 +285,11 @@ begin
     t.WaitFor;
     FreeAndNil(t);
   end;
+end;
+
+procedure TDataSincronizadorModuloWeb.SetNotifier(const Value: ISincronizacaoNotifier);
+begin
+  FNotifier := Value;
 end;
 
 procedure TDataSincronizadorModuloWeb.SetonStepGetters(
