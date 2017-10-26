@@ -20,12 +20,12 @@ type
     procedure SetonStepGetters(const Value: TStepGettersEvent);
     function ShouldContinue: boolean;
   protected
-    posterDataModules: array of TDataIntegradorModuloWebClass;
     Fnotifier: ISincronizacaoNotifier;
     FThreadControl: IThreadControl;
-    function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
   public
+    posterDataModules: array of TDataIntegradorModuloWebClass;
     getterBlocks: TGetterBlocks;
+    function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
     procedure addPosterDataModule(dm: TDataIntegradorModuloWebClass);
     procedure addGetterBlock(getterBlock: TServerToClientBlock);
     procedure ativar;
@@ -59,11 +59,12 @@ type
 
   TRunnerThreadPuters = class(TThread)
   private
+    procedure Setnotifier(const Value: ISincronizacaoNotifier);
+    procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
+  protected
     Fnotifier: ISincronizacaoNotifier;
     FthreadControl: IThreadControl;
     Fsincronizador: TDataSincronizadorModuloWeb;
-    procedure Setnotifier(const Value: ISincronizacaoNotifier);
-    procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
     function ShouldContinue: boolean;
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
@@ -83,7 +84,7 @@ var
 
 implementation
 
-uses ComObj, DLog, acNetUtils;
+uses ComObj, acNetUtils, DLog;
 
 {$R *.dfm}
 
@@ -104,7 +105,7 @@ begin
   t := TRunnerThreadGetters.Create(true);
   t.sincronizador := self;
   t.notifier := notifier;
-  t.Resume;
+  t.Start;
 end;
 
 function TDataSincronizadorModuloWeb.ShouldContinue: boolean;
