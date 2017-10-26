@@ -58,6 +58,7 @@ type
     FdmPrincipal: IDataPrincipal;
     Fnotifier: ISincronizacaoNotifier;
     FDataLog: TDataLog;
+    FthreadControl: IThreadControl;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -68,6 +69,7 @@ type
     procedure SetDataLog(const Value: TDataLog);
     procedure Log(const aLog, aClasse: string);
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
+    procedure SetthreadControl(const Value: IThreadControl);
   protected
     nomeTabela: string;
     nomeSingular: string;
@@ -133,6 +135,7 @@ type
     translations: TTranslationSet;
     verbose: boolean;
     property notifier: ISincronizacaoNotifier read Fnotifier write Fnotifier;
+    property threadControl: IThreadControl read FthreadControl write SetthreadControl;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     procedure getDadosAtualizados(http: TIdHTTP = nil);
@@ -173,6 +176,9 @@ begin
   keepImporting := true;
   while keepImporting do
   begin
+    if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+      Break;
+
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
     if notifier <> nil then
       notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
@@ -189,6 +195,9 @@ begin
         notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
       for i := 0 to numRegistros-1 do
       begin
+        if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+          Break;
+
         if notifier <> nil then
           notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
           '/' + IntToStr(numRegistros));
@@ -756,11 +765,11 @@ begin
       qry.First;
       while not qry.Eof do
       begin
+        if (Self.FthreadControl <> nil) and (not Self.FthreadControl.getShouldContinue) then
+          break;
+
         if notifier <> nil then
         begin
-          if (not notifier.getShouldContinue) then
-            break;
-
           notifier.setCustomMessage('Salvando ' + getHumanReadableName +
             ' ' + IntToStr(n) + '/' + IntToStr(total));
         end;
@@ -1019,6 +1028,11 @@ procedure TDataIntegradorModuloWeb.SetdmPrincipal(
   const Value: IDataPrincipal);
 begin
   FdmPrincipal := Value;
+end;
+
+procedure TDataIntegradorModuloWeb.SetthreadControl(const Value: IThreadControl);
+begin
+  FthreadControl := Value;
 end;
 
 function TDataIntegradorModuloWeb.getdmPrincipal: IDataPrincipal;

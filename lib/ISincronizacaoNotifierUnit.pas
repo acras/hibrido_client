@@ -4,14 +4,18 @@ interface
 
 type
 
-ISincronizacaoNotifier = interface
-  procedure flagSalvandoDadosServidor;
-  procedure unflagSalvandoDadosServidor;
-  procedure flagBuscandoDadosServidor;
-  procedure unflagBuscandoDadosServidor;
-  procedure setCustomMessage(content: string);
-  function getShouldContinue: boolean;
-end;
+  ISincronizacaoNotifier = interface
+    procedure flagSalvandoDadosServidor;
+    procedure unflagSalvandoDadosServidor;
+    procedure flagBuscandoDadosServidor;
+    procedure unflagBuscandoDadosServidor;
+    procedure setCustomMessage(content: string);
+  end;
+
+  IThreadControl = interface
+    function getShouldContinue: boolean;
+    function getURL: string;
+  end;
 
 implementation
 

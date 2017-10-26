@@ -18,9 +18,11 @@ type
     atualizando: boolean;
     FonStepGetters: TStepGettersEvent;
     procedure SetonStepGetters(const Value: TStepGettersEvent);
+    procedure SetthreadControl(const Value: IThreadControl);
   protected
     posterDataModules: array of TDataIntegradorModuloWebClass;
     Fnotifier: ISincronizacaoNotifier;
+    FThreadControl: IThreadControl;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
   public
     getterBlocks: TGetterBlocks;
@@ -32,6 +34,7 @@ type
     procedure threadedGetUpdatedData;
     procedure saveAllToRemote(wait: boolean = false); virtual;
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
+    property threadControl: IThreadControl read FthreadControl write SetthreadControl;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
   end;
@@ -39,11 +42,14 @@ type
   TRunnerThreadGetters = class(TThread)
   private
     Fnotifier: ISincronizacaoNotifier;
+    FThreadControl: IThreadControl;
     Fsincronizador: TDataSincronizadorModuloWeb;
     procedure Setnotifier(const Value: ISincronizacaoNotifier);
     procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
+    procedure SetThreadControl(const Value: IThreadControl);
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
+    property ThreadControl: IThreadControl read FThreadControl write SetThreadControl;
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
   protected
     procedure setMainFormGettingTrue;
@@ -55,12 +61,15 @@ type
   TRunnerThreadPuters = class(TThread)
   private
     Fnotifier: ISincronizacaoNotifier;
+    FthreadControl: IThreadControl;
     Fsincronizador: TDataSincronizadorModuloWeb;
     procedure Setnotifier(const Value: ISincronizacaoNotifier);
     procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
+    procedure SetthreadControl(const Value: IThreadControl);
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
+    property threadControl: IThreadControl read FthreadControl write SetthreadControl;
   protected
     procedure setMainFormPuttingTrue;
     procedure finishPuttingProcess;
@@ -111,11 +120,17 @@ begin
   try
     for i := 0 to length(getterBlocks) - 1 do
     begin
+      if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+        Break;
+
       block := getterBlocks[i];
       dm.startTransaction;
       try
         for j := 0 to length(block) - 1 do
         begin
+          if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+            Break;
+
           with block[j].Create(nil) do
           begin
             notifier := self.notifier;
@@ -172,13 +187,15 @@ procedure TRunnerThreadGetters.Execute;
 begin
   inherited;
   FreeOnTerminate := True;
-  Synchronize(setMainFormGettingTrue);
+  if Self.FthreadControl = nil then
+    Synchronize(setMainFormGettingTrue);
   CoInitializeEx(nil, 0);
   try
     sincronizador.getUpdatedData;
   finally
     CoUninitialize;
-    Synchronize(finishGettingProcess);
+    if Self.FthreadControl = nil then
+      Synchronize(finishGettingProcess);
   end;
 end;
 
@@ -193,7 +210,8 @@ var
 begin
   inherited;
   if salvandoRetaguarda or gravandoVenda then exit;
-  setMainFormPuttingTrue;
+  if Self.FthreadControl = nil then
+    Synchronize(setMainFormPuttingTrue);
   salvandoRetaguarda := true;
   try
     CoInitializeEx(nil, 0);
@@ -206,11 +224,12 @@ begin
           http := getHTTPInstance;
           for i := 0 to length(sincronizador.posterDataModules)-1 do
           begin
-            if (Self.Fnotifier <> nil) and (not Self.Fnotifier.getShouldContinue) then
+            if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
               Break;
             dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
             try
               dmIntegrador.notifier := FNotifier;
+              dmIntegrador.threadControl := Self.FthreadControl;
               dmIntegrador.dmPrincipal := dm;
               dmIntegrador.postRecordsToRemote(http);
             finally
@@ -231,7 +250,8 @@ begin
     end;
   finally
     salvandoRetaguarda := false;
-    Synchronize(finishPuttingProcess);
+    if Self.FthreadControl = nil then
+      Synchronize(finishPuttingProcess);
   end;
 end;
 
@@ -248,6 +268,7 @@ begin
   t := TRunnerThreadPuters.Create(true);
   t.sincronizador := self;
   t.notifier := notifier;
+  t.threadControl := Self.FThreadControl;
   t.FreeOnTerminate := not wait;
   t.Start;
   if wait then
@@ -261,6 +282,11 @@ procedure TDataSincronizadorModuloWeb.SetonStepGetters(
   const Value: TStepGettersEvent);
 begin
   FonStepGetters := Value;
+end;
+
+procedure TDataSincronizadorModuloWeb.SetthreadControl(const Value: IThreadControl);
+begin
+  FthreadControl := Value;
 end;
 
 procedure TRunnerThreadGetters.finishGettingProcess;
@@ -322,10 +348,20 @@ begin
   Fsincronizador := Value;
 end;
 
+procedure TRunnerThreadPuters.SetthreadControl(const Value: IThreadControl);
+begin
+  FthreadControl := Value;
+end;
+
 procedure TRunnerThreadGetters.Setsincronizador(
   const Value: TDataSincronizadorModuloWeb);
 begin
   Fsincronizador := Value;
+end;
+
+procedure TRunnerThreadGetters.SetThreadControl(const Value: IThreadControl);
+begin
+  FThreadControl := Value;
 end;
 
 end.
