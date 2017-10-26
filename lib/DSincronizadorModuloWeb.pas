@@ -191,14 +191,14 @@ procedure TRunnerThreadGetters.Execute;
 begin
   inherited;
   FreeOnTerminate := True;
-  if Self.FthreadControl = nil then
+  if Self.Fnotifier <> nil then
     Synchronize(setMainFormGettingTrue);
   CoInitializeEx(nil, 0);
   try
     sincronizador.getUpdatedData;
   finally
     CoUninitialize;
-    if Self.FthreadControl = nil then
+    if Self.Fnotifier <> nil then
       Synchronize(finishGettingProcess);
   end;
 end;
@@ -219,7 +219,7 @@ var
 begin
   inherited;
   if salvandoRetaguarda or gravandoVenda then exit;
-  if notifier <> nil then
+  if Self.Fnotifier <> nil then
     Synchronize(setMainFormPuttingTrue);
   salvandoRetaguarda := true;
   try
@@ -259,7 +259,7 @@ begin
     end;
   finally
     salvandoRetaguarda := false;
-    if Self.FthreadControl = nil then
+    if Self.Fnotifier <> nil then
       Synchronize(finishPuttingProcess);
   end;
 end;
@@ -285,11 +285,6 @@ begin
     t.WaitFor;
     FreeAndNil(t);
   end;
-end;
-
-procedure TDataSincronizadorModuloWeb.SetNotifier(const Value: ISincronizacaoNotifier);
-begin
-  FNotifier := Value;
 end;
 
 procedure TDataSincronizadorModuloWeb.SetonStepGetters(
