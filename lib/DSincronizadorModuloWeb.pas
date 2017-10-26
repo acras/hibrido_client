@@ -18,7 +18,6 @@ type
     atualizando: boolean;
     FonStepGetters: TStepGettersEvent;
     procedure SetonStepGetters(const Value: TStepGettersEvent);
-    procedure SetthreadControl(const Value: IThreadControl);
   protected
     posterDataModules: array of TDataIntegradorModuloWebClass;
     Fnotifier: ISincronizacaoNotifier;
@@ -34,7 +33,7 @@ type
     procedure threadedGetUpdatedData;
     procedure saveAllToRemote(wait: boolean = false); virtual;
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
-    property threadControl: IThreadControl read FthreadControl write SetthreadControl;
+    property threadControl: IThreadControl read FthreadControl write FthreadControl;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
   end;
@@ -46,10 +45,9 @@ type
     Fsincronizador: TDataSincronizadorModuloWeb;
     procedure Setnotifier(const Value: ISincronizacaoNotifier);
     procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
-    procedure SetThreadControl(const Value: IThreadControl);
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
-    property ThreadControl: IThreadControl read FThreadControl write SetThreadControl;
+    property ThreadControl: IThreadControl read FThreadControl write FthreadControl;
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
   protected
     procedure setMainFormGettingTrue;
@@ -65,11 +63,10 @@ type
     Fsincronizador: TDataSincronizadorModuloWeb;
     procedure Setnotifier(const Value: ISincronizacaoNotifier);
     procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
-    procedure SetthreadControl(const Value: IThreadControl);
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
-    property threadControl: IThreadControl read FthreadControl write SetthreadControl;
+    property threadControl: IThreadControl read FthreadControl write FthreadControl;
   protected
     procedure setMainFormPuttingTrue;
     procedure finishPuttingProcess;
@@ -284,11 +281,6 @@ begin
   FonStepGetters := Value;
 end;
 
-procedure TDataSincronizadorModuloWeb.SetthreadControl(const Value: IThreadControl);
-begin
-  FthreadControl := Value;
-end;
-
 procedure TRunnerThreadGetters.finishGettingProcess;
 var
   i, j: integer;
@@ -348,20 +340,10 @@ begin
   Fsincronizador := Value;
 end;
 
-procedure TRunnerThreadPuters.SetthreadControl(const Value: IThreadControl);
-begin
-  FthreadControl := Value;
-end;
-
 procedure TRunnerThreadGetters.Setsincronizador(
   const Value: TDataSincronizadorModuloWeb);
 begin
   Fsincronizador := Value;
-end;
-
-procedure TRunnerThreadGetters.SetThreadControl(const Value: IThreadControl);
-begin
-  FThreadControl := Value;
 end;
 
 end.
