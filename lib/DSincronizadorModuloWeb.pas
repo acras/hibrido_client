@@ -18,6 +18,7 @@ type
     atualizando: boolean;
     FonStepGetters: TStepGettersEvent;
     procedure SetonStepGetters(const Value: TStepGettersEvent);
+    function ShouldContinue: boolean;
   protected
     posterDataModules: array of TDataIntegradorModuloWebClass;
     Fnotifier: ISincronizacaoNotifier;
@@ -63,6 +64,7 @@ type
     Fsincronizador: TDataSincronizadorModuloWeb;
     procedure Setnotifier(const Value: ISincronizacaoNotifier);
     procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
+    function ShouldContinue: boolean;
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
@@ -105,6 +107,11 @@ begin
   t.Resume;
 end;
 
+function TDataSincronizadorModuloWeb.ShouldContinue: boolean;
+begin
+  Result := (Self.FThreadControl <> nil) and (Self.FThreadControl.getShouldContinue);
+end;
+
 procedure TDataSincronizadorModuloWeb.getUpdatedData;
 var
   i, j: integer;
@@ -117,7 +124,7 @@ begin
   try
     for i := 0 to length(getterBlocks) - 1 do
     begin
-      if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+      if not Self.ShouldContinue then
         Break;
 
       block := getterBlocks[i];
@@ -125,7 +132,7 @@ begin
       try
         for j := 0 to length(block) - 1 do
         begin
-          if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+          if not Self.ShouldContinue then
             Break;
 
           with block[j].Create(nil) do
@@ -198,6 +205,11 @@ end;
 
 { TRunnerThreadPuters }
 
+function TRunnerThreadPuters.ShouldContinue: boolean;
+begin
+  Result := (Self.FThreadControl <> nil) and (Self.FThreadControl.getShouldContinue);
+end;
+
 procedure TRunnerThreadPuters.Execute;
 var
   i: integer;
@@ -221,7 +233,7 @@ begin
           http := getHTTPInstance;
           for i := 0 to length(sincronizador.posterDataModules)-1 do
           begin
-            if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+            if not Self.ShouldContinue then
               Break;
             dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
             try
