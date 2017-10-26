@@ -14,7 +14,6 @@ type
 
   IThreadControl = interface
     function getShouldContinue: boolean;
-    function getURL: string;
   end;
 
 implementation
