@@ -255,7 +255,10 @@ begin
           end;
         except
           on e: Exception do
-            DataLog.log('Erros ao dar saveAllToRemote. Erro: ' + e.Message, 'Sync');
+          begin
+            if DataLog <> nil then
+              DataLog.log('Erros ao dar saveAllToRemote. Erro: ' + e.Message, 'Sync');
+          end;
         end;
       finally
         dm := nil;

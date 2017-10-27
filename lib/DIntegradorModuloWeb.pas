@@ -57,7 +57,6 @@ type
   private
     FdmPrincipal: IDataPrincipal;
     Fnotifier: ISincronizacaoNotifier;
-    FDataLog: TDataLog;
     FthreadControl: IThreadControl;
     FCustomParams: ICustomParams;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
@@ -72,6 +71,7 @@ type
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
   protected
+    FDataLog: TDataLog;
     nomeTabela: string;
     nomeSingular: string;
     nomePlural: string;
@@ -776,7 +776,15 @@ begin
             ' ' + IntToStr(n) + '/' + IntToStr(total));
         end;
         inc(n);
-        saveRecordToRemote(qry, salvou, http);
+
+        try
+          saveRecordToRemote(qry, salvou, http);
+        except
+          on e: Exception do
+          begin
+            Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName +' | '+ e.Message, 'Sync');
+          end;
+        end;
         qry.Next;
       end;
       if notifier <> nil then
