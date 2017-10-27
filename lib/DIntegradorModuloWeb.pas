@@ -59,6 +59,7 @@ type
     Fnotifier: ISincronizacaoNotifier;
     FDataLog: TDataLog;
     FthreadControl: IThreadControl;
+    FCustomParams: ICustomParams;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -136,6 +137,7 @@ type
     verbose: boolean;
     property notifier: ISincronizacaoNotifier read Fnotifier write Fnotifier;
     property threadControl: IThreadControl read FthreadControl write SetthreadControl;
+    property CustomParams: ICustomParams read FCustomParams write FCustomParams;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     procedure getDadosAtualizados(http: TIdHTTP = nil);

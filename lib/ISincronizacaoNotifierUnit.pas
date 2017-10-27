@@ -2,7 +2,10 @@ unit ISincronizacaoNotifierUnit;
 
 interface
 
+Uses System.Generics.Collections;
+
 type
+  TCustomParams = TDictionary<string, string>;
 
   ISincronizacaoNotifier = interface
     procedure flagSalvandoDadosServidor;
@@ -14,6 +17,10 @@ type
 
   IThreadControl = interface
     function getShouldContinue: boolean;
+  end;
+
+  ICustomParams = interface
+    function getCustomParams: TCustomParams;
   end;
 
 implementation

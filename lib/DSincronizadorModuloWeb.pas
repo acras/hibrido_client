@@ -22,6 +22,7 @@ type
   protected
     Fnotifier: ISincronizacaoNotifier;
     FThreadControl: IThreadControl;
+    FCustomParams: ICustomParams;
   public
     posterDataModules: array of TDataIntegradorModuloWebClass;
     getterBlocks: TGetterBlocks;
@@ -35,6 +36,7 @@ type
     procedure saveAllToRemote(wait: boolean = false); virtual;
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
     property threadControl: IThreadControl read FthreadControl write FthreadControl;
+    property CustomParams: ICustomParams read FCustomParams write FCustomParams;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
   end;
@@ -43,12 +45,14 @@ type
   private
     Fnotifier: ISincronizacaoNotifier;
     FThreadControl: IThreadControl;
+    FCustomParams: ICustomParams;
     Fsincronizador: TDataSincronizadorModuloWeb;
     procedure Setnotifier(const Value: ISincronizacaoNotifier);
     procedure Setsincronizador(const Value: TDataSincronizadorModuloWeb);
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
     property ThreadControl: IThreadControl read FThreadControl write FthreadControl;
+    property CustomParams: ICustomParams read FCustomParams write FCustomParams;
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
   protected
     procedure setMainFormGettingTrue;
@@ -65,11 +69,13 @@ type
     Fnotifier: ISincronizacaoNotifier;
     FthreadControl: IThreadControl;
     Fsincronizador: TDataSincronizadorModuloWeb;
+    FCustomParams: ICustomParams;
     function ShouldContinue: boolean;
   public
     property notifier: ISincronizacaoNotifier read Fnotifier write Setnotifier;
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
     property threadControl: IThreadControl read FthreadControl write FthreadControl;
+    property CustomParams: ICustomParams read FCustomParams write FCustomParams;
   protected
     procedure setMainFormPuttingTrue;
     procedure finishPuttingProcess;
@@ -240,6 +246,7 @@ begin
             try
               dmIntegrador.notifier := FNotifier;
               dmIntegrador.threadControl := Self.FthreadControl;
+              dmIntegrador.CustomParams := Self.FCustomParams;
               dmIntegrador.dmPrincipal := dm;
               dmIntegrador.postRecordsToRemote(http);
             finally
@@ -279,6 +286,7 @@ begin
   t.sincronizador := self;
   t.notifier := notifier;
   t.threadControl := Self.FThreadControl;
+  t.CustomParams := Self.FCustomParams;
   t.FreeOnTerminate := not wait;
   t.Start;
   if wait then
