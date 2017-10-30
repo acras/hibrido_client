@@ -67,7 +67,6 @@ type
       tabelaDetalhe: TTabelaDetalhe);
     function GetErrorMessage(const aXML: string): string;
     procedure SetDataLog(const Value: TDataLog);
-    procedure Log(const aLog, aClasse: string);
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
@@ -86,6 +85,7 @@ type
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
     zippedPost: boolean;
+    procedure Log(const aLog, aClasse: string); virtual;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
     function ultimaVersao: integer;
