@@ -70,6 +70,7 @@ type
     procedure Log(const aLog, aClasse: string);
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
+    procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
   protected
     FDataLog: TDataLog;
     nomeTabela: string;
@@ -499,6 +500,13 @@ begin
   Result := 30000;
 end;
 
+procedure TDataIntegradorModuloWeb.OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode;
+  AWorkCount: Int64);
+begin
+  if (Self.FthreadControl <> nil) and (not Self.FthreadControl.getShouldContinue) then
+    Abort;
+end;
+
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
   var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
 var
@@ -524,17 +532,22 @@ begin
   begin
     criouHTTP := true;
     http := getHTTPInstance;
-    http.ConnectTimeout := Self.getTimeoutValue;
-    http.ReadTimeout := Self.getTimeoutValue;
   end;
+
+  http.OnWork := Self.OnWorkHandler;
+  http.ConnectTimeout := Self.getTimeoutValue;
+  http.ReadTimeout := Self.getTimeoutValue;
+
   params := TStringList.Create;
   try
     addTranslatedParams(ds, params, translations);
     addDetails(ds, params);
     addMoreParams(ds, params);
     sucesso := false;
-    while not sucesso do
+    while (not sucesso) do
     begin
+      if (Self.FthreadControl <> nil) and (not Self.FthreadControl.getShouldContinue) then
+        break;
       try
         if useMultipartParams then
         begin
