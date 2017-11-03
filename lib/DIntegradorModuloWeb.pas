@@ -85,7 +85,7 @@ type
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
     zippedPost: boolean;
-    procedure Log(const aLog, aClasse: string); virtual;
+    procedure Log(const aLog: string; aClasse: string = ''); virtual;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
     function ultimaVersao: integer;
@@ -291,10 +291,12 @@ begin
       vNomeSingular := pTabelasDetalhe[i].nomeSingularDetalhe;
 
       if VNomePlural = EmptyStr then
-        raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomePluralDetalhe',[Self.ClassName]);
+        exit;
+        //raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomePluralDetalhe',[Self.ClassName]);
 
       if vNomeSingular = EmptyStr then
-        raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomeSingularDetalhe',[Self.ClassName]);
+        exit;
+        //raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomeSingularDetalhe',[Self.ClassName]);
 
       vNode := pNode.selectSingleNode('./' + dasherize(vNomePlural));
       vNodeList := vNode.selectNodes('./' + dasherize(vNomeSingular));
@@ -660,7 +662,7 @@ begin
   end;
 end;
 
-procedure TDataIntegradorModuloWeb.Log(const aLog, aClasse: string);
+procedure TDataIntegradorModuloWeb.Log(const aLog: string; aClasse: string = '');
 begin
   if (FDataLog <> nil) then
     FDataLog.log(aLog, aClasse);

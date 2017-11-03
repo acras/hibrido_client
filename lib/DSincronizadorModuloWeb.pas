@@ -114,7 +114,9 @@ end;
 
 function TDataSincronizadorModuloWeb.ShouldContinue: boolean;
 begin
-  Result := (Self.FThreadControl <> nil) and (Self.FThreadControl.getShouldContinue);
+  Result := true;
+  if Self.FThreadControl <> nil then
+    result := Self.FThreadControl.getShouldContinue;
 end;
 
 procedure TDataSincronizadorModuloWeb.getUpdatedData;
@@ -360,7 +362,9 @@ end;
 
 function TCustomRunnerThread.ShouldContinue: boolean;
 begin
-  Result := (Self.FThreadControl <> nil) and (Self.FThreadControl.getShouldContinue);
+  result := true;
+  if Self.FThreadControl <> nil then
+    result := Self.FThreadControl.getShouldContinue;
 end;
 
 end.

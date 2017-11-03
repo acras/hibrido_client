@@ -29,7 +29,7 @@ IDataPrincipal = interface
   function sincronizar: boolean;                            //indica se deve-se ou não sincronizar
                                                             //com a parte web. Útil quando queremos ter
                                                             //clientes que sincronizam e outros que não sincronizam
-  procedure SetConnectionParams(aConnectionParams: TStringList);
+  //procedure SetConnectionParams(aConnectionParams: TStringList);
 end;
 
 implementation
