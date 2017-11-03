@@ -4,7 +4,7 @@ interface
 
 uses
   ActiveX, SysUtils, Classes, ExtCtrls, DIntegradorModuloWeb, Dialogs, Windows, IDataPrincipalUnit,
-    ISincronizacaoNotifierUnit, IdHTTP, DLog;
+    ISincronizacaoNotifierUnit, IdHTTP;
 
 type
   TStepGettersEvent = procedure(name: string; step, total: integer) of object;
@@ -23,7 +23,7 @@ type
     Fnotifier: ISincronizacaoNotifier;
     FThreadControl: IThreadControl;
     FCustomParams: ICustomParams;
-    FDataLog: TDataLog;
+    FDataLog: ILog;
   public
     posterDataModules: array of TDataIntegradorModuloWebClass;
     getterBlocks: TGetterBlocks;
@@ -38,7 +38,7 @@ type
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
     property threadControl: IThreadControl read FthreadControl write FthreadControl;
     property CustomParams: ICustomParams read FCustomParams write FCustomParams;
-    property Datalog: TDataLog read FDataLog write FDataLog;
+    property Datalog: ILog read FDataLog write FDataLog;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
   end;
@@ -52,7 +52,7 @@ type
     FthreadControl: IThreadControl;
     Fsincronizador: TDataSincronizadorModuloWeb;
     FCustomParams: ICustomParams;
-    FDataLog: TDataLog;
+    FDataLog: ILog;
     function ShouldContinue: boolean;
     procedure Log(const aLog, aClasse: string);
   public
@@ -60,7 +60,7 @@ type
     property sincronizador: TDataSincronizadorModuloWeb read Fsincronizador write Setsincronizador;
     property threadControl: IThreadControl read FthreadControl write FthreadControl;
     property CustomParams: ICustomParams read FCustomParams write FCustomParams;
-    property DataLog: TDataLog read FDataLog write FDataLog;
+    property DataLog: ILog read FDataLog write FDataLog;
   end;
 
   TRunnerThreadGetters = class(TCustomRunnerThread)

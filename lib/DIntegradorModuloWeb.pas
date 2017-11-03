@@ -8,7 +8,7 @@ uses
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc,
-  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, DLog;
+  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc;
 
 type
   EIntegradorException = class(Exception)
@@ -59,6 +59,7 @@ type
     Fnotifier: ISincronizacaoNotifier;
     FthreadControl: IThreadControl;
     FCustomParams: ICustomParams;
+    FstopOnPostRecordError: boolean;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -66,12 +67,12 @@ type
       params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
     function GetErrorMessage(const aXML: string): string;
-    procedure SetDataLog(const Value: TDataLog);
+    procedure SetDataLog(const Value: ILog);
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
   protected
-    FDataLog: TDataLog;
+    FDataLog: ILog;
     nomeTabela: string;
     nomeSingular: string;
     nomePlural: string;
@@ -88,7 +89,7 @@ type
     procedure Log(const aLog: string; aClasse: string = ''); virtual;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
-    function ultimaVersao: integer;
+    function ultimaVersao: integer; virtual;
     function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string;
     procedure importRecord(node: IXMLDomNode);
     procedure insertRecord(node: IXMLDomNode);
@@ -133,6 +134,8 @@ type
     function getTimeoutValue: integer; virtual;
     function getDateFormat: String; virtual;
     function getAdditionalDetailFilter:String; virtual;
+    function shouldContinue: boolean;
+    procedure onDetailNamesMalformed(configName, tableName: string); virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -140,6 +143,7 @@ type
     property threadControl: IThreadControl read FthreadControl write SetthreadControl;
     property CustomParams: ICustomParams read FCustomParams write FCustomParams;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
+    property stopOnPostRecordError: boolean read FstopOnPostRecordError write FstopOnPostRecordError;
     function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
     procedure getDadosAtualizados(http: TIdHTTP = nil);
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
@@ -148,7 +152,7 @@ type
     class procedure updateDataSets; virtual;
     procedure afterDadosAtualizados; virtual;
     function getHumanReadableName: string; virtual;
-    property DataLog: TDataLog read FDataLog write SetDataLog;
+    property DataLog: ILog read FDataLog write SetDataLog;
     destructor Destroy; override;
   end;
 
@@ -179,7 +183,7 @@ begin
   keepImporting := true;
   while keepImporting do
   begin
-    if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+    if self.shouldContinue then
       Break;
 
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
@@ -198,7 +202,7 @@ begin
         notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
       for i := 0 to numRegistros-1 do
       begin
-        if (Self.FThreadControl <> nil) and (not Self.FThreadControl.getShouldContinue) then
+        if self.shouldContinue then
           Break;
 
         if notifier <> nil then
@@ -246,6 +250,13 @@ begin
     updateSingletonRecord(node);
 end;
 
+function TDataIntegradorModuloWeb.shouldContinue: boolean;
+begin
+  Result := true;
+  if Self.FThreadControl <> nil then
+    result := Self.FThreadControl.getShouldContinue;
+end;
+
 function TDataIntegradorModuloWeb.singleton: boolean;
 begin
   result := (nomePKLocal = '') and (nomePKRemoto = '');
@@ -291,12 +302,10 @@ begin
       vNomeSingular := pTabelasDetalhe[i].nomeSingularDetalhe;
 
       if VNomePlural = EmptyStr then
-        exit;
-        //raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomePluralDetalhe',[Self.ClassName]);
+        onDetailNamesMalformed(pTabelasDetalhe[i].nomeTabela, 'NomePlural');
 
       if vNomeSingular = EmptyStr then
-        exit;
-        //raise EIntegradorException.CreateFmt('Tabela detalhe da Classe %s não possui configuração de NomeSingularDetalhe',[Self.ClassName]);
+        onDetailNamesMalformed(pTabelasDetalhe[i].nomeTabela, 'NomeSingular');
 
       vNode := pNode.selectSingleNode('./' + dasherize(vNomePlural));
       vNodeList := vNode.selectNodes('./' + dasherize(vNomeSingular));
@@ -534,11 +543,10 @@ begin
   begin
     criouHTTP := true;
     http := getHTTPInstance;
+    http.OnWork := Self.OnWorkHandler;
+    http.ConnectTimeout := Self.getTimeoutValue;
+    http.ReadTimeout := Self.getTimeoutValue;
   end;
-
-  http.OnWork := Self.OnWorkHandler;
-  http.ConnectTimeout := Self.getTimeoutValue;
-  http.ReadTimeout := Self.getTimeoutValue;
 
   params := TStringList.Create;
   try
@@ -668,7 +676,7 @@ begin
     FDataLog.log(aLog, aClasse);
 end;
 
-procedure TDataIntegradorModuloWeb.SetDataLog(const Value: TDataLog);
+procedure TDataIntegradorModuloWeb.SetDataLog(const Value: ILog);
 begin
   FDataLog := Value;
 end;
@@ -782,7 +790,7 @@ begin
       qry.First;
       while not qry.Eof do
       begin
-        if (Self.FthreadControl <> nil) and (not Self.FthreadControl.getShouldContinue) then
+        if self.shouldContinue then
           break;
 
         if notifier <> nil then
@@ -798,6 +806,8 @@ begin
           on e: Exception do
           begin
             Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName +' | '+ e.Message, 'Sync');
+            if stopOnPostRecordError then
+              raise;
           end;
         end;
         qry.Next;
@@ -807,7 +817,8 @@ begin
       Self.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
     except
       Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
-      raise;
+      if stopOnPostRecordError then
+        raise;
     end;
   finally
     FreeAndNil(qry);
@@ -908,6 +919,7 @@ begin
   nomeGenerator := '';
   useMultipartParams := false;
   zippedPost := true;
+  FstopOnPostRecordError := true;
 end;
 
 
@@ -928,7 +940,7 @@ var
 begin
   if translation.lookupRemoteTable <> '' then
   begin
-    if Trim(field.asString) <> EmptyStr then
+    if (field.asInteger >= 0) and not(field.IsNull) then
     begin
       if fkName = '' then
         fk := translation.pdv
@@ -1036,6 +1048,11 @@ end;
 function TDataIntegradorModuloWeb.nomeSingularSave: string;
 begin
   result := nomeSingular;
+end;
+
+procedure TDataIntegradorModuloWeb.onDetailNamesMalformed(configName, tableName: string);
+begin
+  self.Log(Format('Tabela detalhe: %s da Classe: %s não possui configuração de %s',[tableName, Self.ClassName, configName]));
 end;
 
 function TDataIntegradorModuloWeb.getOrderBy: string;

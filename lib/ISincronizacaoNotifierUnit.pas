@@ -17,7 +17,10 @@ type
 
   IThreadControl = interface
     function getShouldContinue: boolean;
-    procedure Log(const aLog, aClasse: string);
+  end;
+
+  ILog = interface
+    procedure log(const mensagem: string; const classe: string = ''; newLine: boolean = true; timestamp: boolean = true);
   end;
 
   ICustomParams = interface
