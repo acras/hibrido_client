@@ -790,7 +790,7 @@ begin
       qry.First;
       while not qry.Eof do
       begin
-        if self.shouldContinue then
+        if (not self.shouldContinue) then
           break;
 
         if notifier <> nil then
