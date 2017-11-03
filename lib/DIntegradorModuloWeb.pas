@@ -810,8 +810,6 @@ end;
 constructor TTranslationSet.create(owner: TComponent);
 begin
   SetLength(translations, 0);
-  add('version', 'versao');
-  add('active', 'ativo');
 end;
 
 function TTranslationSet.get(index: integer): TNameTranslation;
