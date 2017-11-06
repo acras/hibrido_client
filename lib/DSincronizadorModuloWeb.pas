@@ -108,6 +108,9 @@ var
 begin
   t := TRunnerThreadGetters.Create(true);
   t.sincronizador := self;
+  t.threadControl := self.threadControl;
+  t.CustomParams := self.CustomParams;
+  t.DataLog := Self.Datalog;
   t.notifier := notifier;
   t.Start;
 end;
