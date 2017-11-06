@@ -33,7 +33,7 @@ type
     procedure ativar;
     procedure desativar;
     procedure getUpdatedData;
-    procedure threadedGetUpdatedData;
+    procedure threadedGetUpdatedData(wait: boolean = false);
     procedure saveAllToRemote(wait: boolean = false); virtual;
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
     property threadControl: IThreadControl read FthreadControl write FthreadControl;
@@ -102,7 +102,7 @@ begin
   posterDataModules[size] := dm;
 end;
 
-procedure TDataSincronizadorModuloWeb.threadedGetUpdatedData;
+procedure TDataSincronizadorModuloWeb.threadedGetUpdatedData(wait: boolean = false);
 var
   t: TRunnerThreadGetters;
 begin
@@ -113,6 +113,11 @@ begin
   t.DataLog := Self.Datalog;
   t.notifier := notifier;
   t.Start;
+  if wait then
+  begin
+    t.WaitFor;
+    FreeAndNil(t);
+  end;
 end;
 
 function TDataSincronizadorModuloWeb.ShouldContinue: boolean;
@@ -129,7 +134,18 @@ var
   dm: IDataPrincipal;
   http: TidHTTP;
   dimw: TDataIntegradorModuloWeb;
+  tContrl: IThreadControl;
+  cParams: ICustomParams;
+  dLog: ILog;
+  ntfr: ISincronizacaoNotifier;
+
 begin
+  //estava perdendo o ponteiro no for, tive de guardar aqui, pra depois atribuir
+  tcontrl := Self.threadControl;
+  cParams := Self.CustomParams;
+  dLog := Self.Datalog;
+  ntfr := Self.notifier;
+
   dm := getNewDataPrincipal;
   http := getHTTPInstance;
   try
@@ -148,11 +164,11 @@ begin
 
           dimw := block[j].Create(nil);
           try
-            dimw.notifier := self.notifier;
+            dimw.notifier := ntfr;
             dimw.dmPrincipal := dm;
-            dimw.threadcontrol := Self.threadControl;
-            dimw.CustomParams := Self.CustomParams;
-            dimw.DataLog := Self.Datalog;
+            dimw.threadcontrol := tcontrl;
+            dimw.CustomParams := cParams;
+            dimw.DataLog := dLog;
             dimw.getDadosAtualizados(http);
             if Assigned(onStepGetters) then onStepGetters(dimw.getHumanReadableName, i+1, length(getterBlocks));
           finally
@@ -270,6 +286,10 @@ begin
     Synchronize(Self.setMainFormGettingTrue);
   CoInitializeEx(nil, 0);
   try
+    sincronizador.notifier := Self.notifier;
+    sincronizador.threadControl := Self.threadControl;
+    sincronizador.Datalog := Self.DataLog;
+    sincronizador.CustomParams := Self.CustomParams;
     sincronizador.getUpdatedData;
   finally
     CoUninitialize;
