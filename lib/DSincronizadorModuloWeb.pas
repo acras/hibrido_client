@@ -125,6 +125,7 @@ var
   block: TServerToClientBlock;
   dm: IDataPrincipal;
   http: TidHTTP;
+  dimw: TDataIntegradorModuloWeb;
 begin
   dm := getNewDataPrincipal;
   http := getHTTPInstance;
@@ -142,13 +143,17 @@ begin
           if not Self.ShouldContinue then
             Break;
 
-          with block[j].Create(nil) do
-          begin
-            notifier := self.notifier;
-            dmPrincipal := dm;
-            getDadosAtualizados(http);
-            if Assigned(onStepGetters) then onStepGetters(getHumanReadableName, i+1, length(getterBlocks));
-            free;
+          dimw := block[j].Create(nil);
+          try
+            dimw.notifier := self.notifier;
+            dimw.dmPrincipal := dm;
+            dimw.threadcontrol := Self.threadControl;
+            dimw.CustomParams := Self.CustomParams;
+            dimw.DataLog := Self.Datalog;
+            dimw.getDadosAtualizados(http);
+            if Assigned(onStepGetters) then onStepGetters(dimw.getHumanReadableName, i+1, length(getterBlocks));
+          finally
+            dimw.free;
           end;
         end;
         dm.commit;
