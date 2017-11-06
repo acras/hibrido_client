@@ -33,7 +33,7 @@ type
     procedure ativar;
     procedure desativar;
     procedure getUpdatedData;
-    procedure threadedGetUpdatedData(wait: boolean = false);
+    procedure threadedGetUpdatedData;
     procedure saveAllToRemote(wait: boolean = false); virtual;
     property notifier: ISincronizacaoNotifier read FNotifier write FNotifier;
     property threadControl: IThreadControl read FthreadControl write FthreadControl;
@@ -102,7 +102,7 @@ begin
   posterDataModules[size] := dm;
 end;
 
-procedure TDataSincronizadorModuloWeb.threadedGetUpdatedData(wait: boolean = false);
+procedure TDataSincronizadorModuloWeb.threadedGetUpdatedData;
 var
   t: TRunnerThreadGetters;
 begin
@@ -113,11 +113,6 @@ begin
   t.DataLog := Self.Datalog;
   t.notifier := notifier;
   t.Start;
-  if wait then
-  begin
-    t.WaitFor;
-    FreeAndNil(t);
-  end;
 end;
 
 function TDataSincronizadorModuloWeb.ShouldContinue: boolean;
