@@ -203,7 +203,7 @@ begin
         notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
       for i := 0 to numRegistros-1 do
       begin
-        if self.shouldContinue then
+        if (not self.shouldContinue) then
           Break;
 
         if notifier <> nil then
