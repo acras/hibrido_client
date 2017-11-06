@@ -86,6 +86,7 @@ type
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
     zippedPost: boolean;
+    function getVersionFieldName: string; virtual;
     procedure Log(const aLog: string; aClasse: string = ''); virtual;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
@@ -183,7 +184,7 @@ begin
   keepImporting := true;
   while keepImporting do
   begin
-    if self.shouldContinue then
+    if (not self.shouldContinue) then
       Break;
 
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
@@ -419,7 +420,12 @@ end;
 
 function TDataIntegradorModuloWeb.ultimaVersao: integer;
 begin
-  result := dmPrincipal.getSQLIntegerResult('Select max(versao) from ' + nomeTabela);
+  result := dmPrincipal.getSQLIntegerResult('Select max('+self.getVersionFieldName+') from ' + nomeTabela);
+end;
+
+function TDataIntegradorModuloWeb.getVersionFieldName: string;
+begin
+  Result := 'versao';
 end;
 
 function TDataIntegradorModuloWeb.translateFieldValue(
