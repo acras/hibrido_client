@@ -129,18 +129,7 @@ var
   dm: IDataPrincipal;
   http: TidHTTP;
   dimw: TDataIntegradorModuloWeb;
-  tContrl: IThreadControl;
-  cParams: ICustomParams;
-  dLog: ILog;
-  ntfr: ISincronizacaoNotifier;
-
 begin
-  //estava perdendo o ponteiro no for, tive de guardar aqui, pra depois atribuir
-  tcontrl := Self.threadControl;
-  cParams := Self.CustomParams;
-  dLog := Self.Datalog;
-  ntfr := Self.notifier;
-
   dm := getNewDataPrincipal;
   http := getHTTPInstance;
   try
@@ -159,11 +148,11 @@ begin
 
           dimw := block[j].Create(nil);
           try
-            dimw.notifier := ntfr;
+            dimw.notifier := Self.Fnotifier;
             dimw.dmPrincipal := dm;
-            dimw.threadcontrol := tcontrl;
-            dimw.CustomParams := cParams;
-            dimw.DataLog := dLog;
+            dimw.threadcontrol := Self.FThreadControl;
+            dimw.CustomParams := Self.FCustomParams;
+            dimw.DataLog := Self.FDataLog;
             dimw.getDadosAtualizados(http);
             if Assigned(onStepGetters) then onStepGetters(dimw.getHumanReadableName, i+1, length(getterBlocks));
           finally
