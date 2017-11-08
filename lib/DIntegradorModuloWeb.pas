@@ -669,18 +669,16 @@ begin
           end
           else
           begin
-            if IdRemoto > 0 then
-            begin
-              putStream := TStringStream.Create;
-              try
-                Params.SaveToStream(putStream, TEncoding.UTF8);
-                xmlContent := http.Put(url, putStream);
-              finally
-                putStream.Free;
-              end;
-            end
-            else
-              xmlContent := http.Post(url, Params);
+            putStream := TStringStream.Create;
+            try
+              Params.SaveToStream(putStream, TEncoding.UTF8);
+              if IdRemoto > 0 then
+                xmlContent := http.Put(url, putStream)
+              else
+                xmlContent := http.Post(url, putStream);
+            finally
+              putStream.Free;
+            end;
           end;
         end;
         sucesso := true;
