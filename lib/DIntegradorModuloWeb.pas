@@ -249,27 +249,30 @@ var
 begin
   if not singleton then
   begin
-    id := strToInt(node.selectSingleNode(dasherize(nomePKRemoto)).text);
-    dmPrincipal.startTransaction;
-    try
-      if jaExiste(id) then
-      begin
-        statement := Self.GetUpdateStatement(node, id);
-        Self.updateRecord(statement, id);
-      end
-      else
-      begin
-        statement := Self.getInsertStatement(node);
-        insertRecord(statement);
-      end;
+    id := strToIntDef(node.selectSingleNode(dasherize(nomePKRemoto)).text, -1);
+    if id >= 0 then
+    begin
+      dmPrincipal.startTransaction;
+      try
+        if jaExiste(id) then
+        begin
+          statement := Self.GetUpdateStatement(node, id);
+          Self.updateRecord(statement, id);
+        end
+        else
+        begin
+          statement := Self.getInsertStatement(node);
+          insertRecord(statement);
+        end;
 
-      dmPrincipal.commit;
-    except
-      on E:Exception do
-      begin
-        dmPrincipal.rollBack;
-        if Self.DataLog <> nil then
-          Self.DataLog.log(Format('Erro ao importar a tabela "%s": "%s". '+ #13#10 + 'Comando: "%s"', [self.nomeTabela, e.Message, statement]));
+        dmPrincipal.commit;
+      except
+        on E:Exception do
+        begin
+          dmPrincipal.rollBack;
+          if Self.DataLog <> nil then
+            Self.DataLog.log(Format('Erro ao importar a tabela "%s": "%s". '+ #13#10 + 'Comando: "%s"', [self.nomeTabela, e.Message, statement]));
+        end;
       end;
     end;
   end
@@ -963,7 +966,10 @@ begin
   else
     for i := low(translations) to high(translations) do
       if translations[i].server = underscorize(serverName) then
+      begin
         result := translations[i].pdv;
+        break;
+      end;
 end;
 
 procedure TDataIntegradorModuloWeb.DataModuleCreate(Sender: TObject);
