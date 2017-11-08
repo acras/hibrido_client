@@ -669,9 +669,7 @@ begin
           end
           else
           begin
-            if IdRemoto = -1 then
-              xmlContent := http.Post(url, Params)
-            else
+            if IdRemoto > 0 then
             begin
               putStream := TStringStream.Create;
               try
@@ -680,7 +678,9 @@ begin
               finally
                 putStream.Free;
               end;
-            end;
+            end
+            else
+              xmlContent := http.Post(url, Params);
           end;
         end;
         sucesso := true;
