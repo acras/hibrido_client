@@ -145,6 +145,7 @@ type
     function getObjectsList: string; virtual;
     function getUpdateStatement(node: IXMLDomNode; const id: integer): String; virtual;
     function getInsertStatement(node: IXMLDomNode): String; virtual;
+    procedure BeforePostToServer(ds: TDataSet; Params: TStringList); virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -565,6 +566,11 @@ begin
   //
 end;
 
+procedure TDataIntegradorModuloWeb.BeforePostToServer(ds: TDataSet; Params: TStringList);
+begin
+  //
+end;
+
 function TDataIntegradorModuloWeb.getTimeoutValue: integer;
 begin
   Result := 30000;
@@ -593,6 +599,7 @@ var
   url: string;
   criouHttp: boolean;
   log: string;
+  putStream: TStringStream;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
@@ -640,7 +647,7 @@ begin
             A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
             e precisa ser garantido que o post está de fato indo zipado.
           }
-
+          Self.BeforePostToServer(ds, Params);
           if zippedPost then
           begin
             http.Request.ContentEncoding := 'gzip';
@@ -662,7 +669,18 @@ begin
           end
           else
           begin
-            xmlContent := http.Post(url, Params);
+            if IdRemoto = -1 then
+              xmlContent := http.Post(url, Params)
+            else
+            begin
+              putStream := TStringStream.Create;
+              try
+                Params.SaveToStream(putStream, TEncoding.UTF8);
+                xmlContent := http.Put(url, putStream);
+              finally
+                putStream.Free;
+              end;
+            end;
           end;
         end;
         sucesso := true;
