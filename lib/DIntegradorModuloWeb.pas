@@ -90,6 +90,7 @@ type
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
     zippedPost: boolean;
+    restFull: boolean;
     function getVersionFieldName: string; virtual;
     procedure Log(const aLog: string; aClasse: string = ''); virtual;
     function extraGetUrlParams: String; virtual;
@@ -616,9 +617,6 @@ begin
 
   params := TStringList.Create;
   try
-    if ds.FindField('IdRemoto') <> nil then
-      IdRemoto := ds.FieldByName('IdRemoto').AsInteger;
-
     addTranslatedParams(ds, params, translations);
     addDetails(ds, params);
     addMoreParams(ds, params);
@@ -669,15 +667,23 @@ begin
           end
           else
           begin
-            putStream := TStringStream.Create;
-            try
-              Params.SaveToStream(putStream, TEncoding.UTF8);
-              if IdRemoto > 0 then
-                xmlContent := http.Put(url, putStream)
-              else
-                xmlContent := http.Post(url, putStream);
-            finally
-              putStream.Free;
+            if not restFull then
+               xmlContent := http.Post(url, Params)
+            else
+            begin
+              if ds.FindField('IdRemoto') <> nil then
+                IdRemoto := ds.FieldByName('IdRemoto').AsInteger;
+
+              putStream := TStringStream.Create;
+              try
+                Params.SaveToStream(putStream, TEncoding.UTF8);
+                if IdRemoto > 0 then
+                  xmlContent := http.Put(url, putStream)
+                else
+                  xmlContent := http.Post(url, putStream);
+              finally
+                putStream.Free;
+              end;
             end;
           end;
         end;
@@ -1000,6 +1006,7 @@ begin
   nomeGenerator := '';
   useMultipartParams := false;
   zippedPost := true;
+  restFull := False;
   FstopOnPostRecordError := true;
 end;
 
