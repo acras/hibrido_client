@@ -640,6 +640,9 @@ begin
         end
         else
         begin
+          if Self.restFull and (ds.FindField('IdRemoto') <> nil) then
+            IdRemoto := ds.FieldByName('IdRemoto').AsInteger;
+
           url := getRequestUrlForAction(true, -1, IdRemoto);
           {
             A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
@@ -671,9 +674,6 @@ begin
                xmlContent := http.Post(url, Params)
             else
             begin
-              if ds.FindField('IdRemoto') <> nil then
-                IdRemoto := ds.FieldByName('IdRemoto').AsInteger;
-
               putStream := TStringStream.Create;
               try
                 Params.SaveToStream(putStream, TEncoding.UTF8);
