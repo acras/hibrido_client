@@ -90,13 +90,13 @@ type
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
     zippedPost: boolean;
-    restFull: boolean;
+    postContentOnBody: boolean;
     function getVersionFieldName: string; virtual;
     procedure Log(const aLog: string; aClasse: string = ''); virtual;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
     function ultimaVersao: integer; virtual;
-    function getRequestUrlForAction(toSave: boolean; versao: integer = -1; IdRemoto: integer = -1): string; virtual;
+    function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string; virtual;
     procedure importRecord(node: IXMLDomNode);
     procedure insertRecord(const aInsertStatement: string);
     procedure updateRecord(const aUpdateStatement: string; const id: integer);
@@ -155,7 +155,7 @@ type
     property CustomParams: ICustomParams read FCustomParams write FCustomParams;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     property stopOnPostRecordError: boolean read FstopOnPostRecordError write FstopOnPostRecordError;
-    function buildRequestURL(nomeRecurso: string; params: string = ''; httpAction: THttpAction = haGet; IdRemoto: integer = -1): string; virtual; abstract;
+    function buildRequestURL(nomeRecurso: string; params: string = ''; httpAction: THttpAction = haGet): string; virtual; abstract;
     procedure getDadosAtualizados(http: TIdHTTP = nil);
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
     procedure migrateSingletonTableToRemote;
@@ -454,14 +454,14 @@ begin
   Result := True;
 end;
 
-function TDataIntegradorModuloWeb.getRequestUrlForAction(toSave: boolean; versao: integer = -1; IdRemoto: integer = -1): string;
+function TDataIntegradorModuloWeb.getRequestUrlForAction(toSave: boolean; versao: integer = -1): string;
 var
   nomeRecurso: string;
 begin
   if toSave then
   begin
     nomeRecurso := nomeActionSave;
-    Result := buildRequestURL(nomeRecurso, '', haPost, IdRemoto);
+    Result := buildRequestURL(nomeRecurso, '', haPost);
   end
   else
   begin
@@ -600,7 +600,7 @@ var
   url: string;
   criouHttp: boolean;
   log: string;
-  putStream: TStringStream;
+  pStream: TStringStream;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
@@ -626,13 +626,14 @@ begin
       if (Self.FthreadControl <> nil) and (not Self.FthreadControl.getShouldContinue) then
         break;
       try
+        Self.BeforePostToServer(ds, Params);
         if useMultipartParams then
         begin
           multiPartParams := TIdMultiPartFormDataStream.Create;
           try
             stream := TStringStream.Create('');
             prepareMultipartParams(ds, params, multipartParams);
-            http.Post(getRequestUrlForAction(true, -1, IdRemoto), multipartParams, stream);
+            http.Post(getRequestUrlForAction(true, -1), multipartParams, stream);
             xmlContent := stream.ToString;
           finally
             MultipartParams.Free;
@@ -640,15 +641,11 @@ begin
         end
         else
         begin
-          if Self.restFull and (ds.FindField('IdRemoto') <> nil) then
-            IdRemoto := ds.FieldByName('IdRemoto').AsInteger;
-
-          url := getRequestUrlForAction(true, -1, IdRemoto);
+          url := getRequestUrlForAction(true, -1);
           {
             A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
             e precisa ser garantido que o post está de fato indo zipado.
           }
-          Self.BeforePostToServer(ds, Params);
           if zippedPost then
           begin
             http.Request.ContentEncoding := 'gzip';
@@ -670,19 +667,16 @@ begin
           end
           else
           begin
-            if not restFull then
+            if not postContentOnBody then
                xmlContent := http.Post(url, Params)
             else
             begin
-              putStream := TStringStream.Create;
+              pStream := TStringStream.Create;
               try
-                Params.SaveToStream(putStream, TEncoding.UTF8);
-                if IdRemoto > 0 then
-                  xmlContent := http.Put(url, putStream)
-                else
-                  xmlContent := http.Post(url, putStream);
+                Params.SaveToStream(pStream, TEncoding.UTF8);
+                xmlContent := http.Post(url, pStream);
               finally
-                putStream.Free;
+                pStream.Free;
               end;
             end;
           end;
@@ -1006,7 +1000,7 @@ begin
   nomeGenerator := '';
   useMultipartParams := false;
   zippedPost := true;
-  restFull := False;
+  postContentOnBody := False;
   FstopOnPostRecordError := true;
 end;
 
