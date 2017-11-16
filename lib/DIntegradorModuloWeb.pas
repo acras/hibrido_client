@@ -700,7 +700,11 @@ begin
 
           if duasVias then
           begin
-            idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text);
+            if doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
+              idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
+            else
+              idRemoto := StrToInt(doc.selectSingleNode('hash').selectSingleNode('id').text);
+
             txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
           end;
 
