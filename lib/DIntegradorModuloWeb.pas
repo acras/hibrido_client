@@ -770,23 +770,26 @@ var
   XML: IXMLDocument;
 begin
   Result := EmptyStr;
-  CoInitialize(nil);
-  XML := TXMLDocument.Create(Self);
-  try
-    XML.LoadFromXML(aXML);
-    list := XML.ChildNodes;
-    if list.FindNode('errors') <> nil then
-    begin
-      list := list.FindNode('errors').ChildNodes;
-      if list <> nil  then
+  if Trim(aXML) <> EmptyStr then
+  begin
+    CoInitialize(nil);
+    XML := TXMLDocument.Create(Self);
+    try
+      XML.LoadFromXML(aXML);
+      list := XML.ChildNodes;
+      if list.FindNode('errors') <> nil then
       begin
-        node := list.FindNode('error');
-        if node <> nil then
-          Result := node.Text;
+        list := list.FindNode('errors').ChildNodes;
+        if list <> nil  then
+        begin
+          node := list.FindNode('error');
+          if node <> nil then
+            Result := node.Text;
+        end;
       end;
+    finally
+      CoUninitialize;
     end;
-  finally
-    CoUninitialize;
   end;
 end;
 
