@@ -601,13 +601,13 @@ var
   criouHttp: boolean;
   log: string;
   pStream: TStringStream;
-  versionId: largeInt;
+  version: largeInt;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   criouHTTP := false;
   idRemoto := -1;
-  versionId := -1;
+  version := -1;
   if http = nil then
   begin
     criouHTTP := true;
@@ -710,13 +710,13 @@ begin
             if idRemoto > 0 then
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
 
-            if doc.selectSingleNode('//version-id//id') <> nil then
-              versionId := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//version-id').text)
-            else if doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('version-id') <> nil then
-              versionId := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('version-id').text);
 
-            if versionId > 0 then
-              txtUpdate := txtUpdate + ', versionId = ' + IntToStr(versionId);
+            //incluir no update o version retornado pelo retaguarda
+            //se precisar de um nome diferente fazer como propriedade da classe
+            if doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode(self.getVersionFieldName) <> nil then
+              version := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode(self.getVersionFieldName).text);
+            if version > 0 then
+              txtUpdate := txtUpdate + ', ' + self.getVersionFieldName + ' = ' + IntToStr(version);
           end;
 
           txtUpdate := txtUpdate + ' WHERE salvouRetaguarda = ''N'' and ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
