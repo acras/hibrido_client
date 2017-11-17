@@ -362,8 +362,8 @@ begin
                           QuotedStr('S') + ', idRemoto = ' + vIdRemoto +
                           ' WHERE salvouRetaguarda = ''N'' and ' + pTabelasDetalhe[i].nomePK + ' = ' + vPkLocal) ;
       end;
-      if Length(pTabelasDetalhe[i].tabelasDetalhe) > 0 then
-         Self.UpdateRecordDetalhe(vNode, pTabelasDetalhe[i].tabelasDetalhe);
+      if (Length(pTabelasDetalhe[i].tabelasDetalhe) > 0) and (vNode <> nil) then
+        Self.UpdateRecordDetalhe(vNode, pTabelasDetalhe[i].tabelasDetalhe);
     end;
   except
     raise;
@@ -601,11 +601,13 @@ var
   criouHttp: boolean;
   log: string;
   pStream: TStringStream;
+  versionId: largeInt;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   criouHTTP := false;
   idRemoto := -1;
+  versionId := -1;
   if http = nil then
   begin
     criouHTTP := true;
@@ -703,9 +705,18 @@ begin
             if doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
               idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
             else
-              idRemoto := StrToInt(doc.selectSingleNode('hash').selectSingleNode('id').text);
+              idRemoto := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
 
-            txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
+            if idRemoto > 0 then
+              txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
+
+            if doc.selectSingleNode('//version-id//id') <> nil then
+              versionId := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//version-id').text)
+            else if doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('version-id') <> nil then
+              versionId := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('version-id').text);
+
+            if versionId > 0 then
+              txtUpdate := txtUpdate + ', versionId = ' + IntToStr(versionId);
           end;
 
           txtUpdate := txtUpdate + ' WHERE salvouRetaguarda = ''N'' and ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
@@ -719,7 +730,7 @@ begin
             dmPrincipal.commit;
           end;
 
-          if Length(TabelasDetalhe) > 0 then
+          if (Length(TabelasDetalhe) > 0) and (doc.selectSingleNode(dasherize(nomeSingularSave)) <> nil) then
              Self.UpdateRecordDetalhe(doc.selectSingleNode(dasherize(nomeSingularSave)), TabelasDetalhe);
 
         end;
