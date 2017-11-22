@@ -83,6 +83,7 @@ type
     nomePKLocal: string;
     nomePKRemoto: string;
     nomeGenerator: string;
+    usePKLocalMethod: Boolean;
     duasVias: boolean;
     useMultipartParams: boolean;
     clientToServer: boolean;
@@ -147,6 +148,7 @@ type
     function getUpdateStatement(node: IXMLDomNode; const id: integer): String; virtual;
     function getInsertStatement(node: IXMLDomNode): String; virtual;
     procedure BeforePostToServer(ds: TDataSet; Params: TStringList); virtual;
+    function getNewId: Integer; virtual; abstract;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -393,7 +395,7 @@ var
   name: string;
 begin
   result := '(';
-  if duasVias and (nomeGenerator <> '') then
+  if duasVias and ((nomeGenerator <> '') or (usePKLocalMethod)) then
     result := result + nomePKLocal + ', ';
   if duasVias then
     result := result + 'salvouRetaguarda, ';
@@ -415,8 +417,13 @@ var
   name: string;
 begin
   result := '(';
-  if duasVias and (nomeGenerator <> '') then
-    result := result + 'gen_id(' + nomeGenerator + ',1), ';
+  if duasVias and ((nomeGenerator <> '') or (usePKLocalMethod)) then
+  begin
+    if nomeGenerator <> '' then
+      result := result + 'gen_id(' + nomeGenerator + ',1), '
+    else
+      Result := Result + IntToStr(getNewId) + ', ';
+  end;
   if duasVias then
     result := result + QuotedStr('S') + ', ';
   for i := 0 to node.childNodes.length - 1 do
@@ -490,6 +497,10 @@ var
 begin
   if (node.attributes.getNamedItem('nil') <> nil) and (node.attributes.getNamedItem('nil').text = 'true') then
     result := 'NULL'
+  else if node.nodeName = nomePKLocal then
+  begin
+    result := IntToStr(getNewId);
+  end
   else if (node.attributes.getNamedItem('type') <> nil) then
   begin
     typedTranslate := translateTypeValue(node.attributes.getNamedItem('type').text, node.text);
@@ -1006,6 +1017,7 @@ begin
   nomePKRemoto := 'id';
   SetLength(tabelasDependentes, 0);
   nomeGenerator := '';
+  usePKLocalMethod := false;
   useMultipartParams := false;
   zippedPost := true;
   postContentOnBody := False;
