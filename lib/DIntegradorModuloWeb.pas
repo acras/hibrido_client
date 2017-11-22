@@ -601,13 +601,11 @@ var
   criouHttp: boolean;
   log: string;
   pStream: TStringStream;
-  version: largeInt;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   criouHTTP := false;
   idRemoto := -1;
-  version := -1;
   if http = nil then
   begin
     criouHTTP := true;
@@ -615,6 +613,8 @@ begin
     http.OnWork := Self.OnWorkHandler;
     http.ConnectTimeout := Self.getTimeoutValue;
     http.ReadTimeout := Self.getTimeoutValue;
+    http.Request.Clear;
+    http.Disconnect;    
   end;
 
   params := TStringList.Create;
@@ -711,13 +711,6 @@ begin
 
             if idRemoto > 0 then
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
-
-            //incluir no update o version retornado pelo retaguarda
-            //se precisar de um nome diferente fazer como propriedade da classe
-            if doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode(self.getVersionFieldName) <> nil then
-              version := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode(self.getVersionFieldName).text);
-            if version > 0 then
-              txtUpdate := txtUpdate + ', ' + self.getVersionFieldName + ' = ' + IntToStr(version);
           end;
 
           txtUpdate := txtUpdate + ' WHERE salvouRetaguarda = ''N'' and ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
@@ -746,7 +739,7 @@ begin
             log :=  Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: %s.',[ClassName, e.ErrorCode, e.ErrorMessage]);
 
           Self.log(log, 'Sync');
-          raise EIntegradorException.Create(log) ; //Logou, agora manda pra cima
+          raise EIntegradorException.Create(log) ; //Logou, agorra manda pra cima
         end;
         on E: Exception do
         begin
