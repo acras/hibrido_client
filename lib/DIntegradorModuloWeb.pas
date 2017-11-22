@@ -704,12 +704,13 @@ begin
           begin
             if doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
               idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
+            else if doc.selectSingleNode('//hash//id') <> nil then                 
+              idRemoto := StrToInt(doc.selectSingleNode('//hash//id').text)
             else
-              idRemoto := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
+              idRemoto := StrToInt(doc.selectSingleNode('hash').selectSingleNode('id').text);
 
             if idRemoto > 0 then
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
-
 
             //incluir no update o version retornado pelo retaguarda
             //se precisar de um nome diferente fazer como propriedade da classe
