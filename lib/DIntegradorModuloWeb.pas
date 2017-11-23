@@ -14,6 +14,10 @@ type
   EIntegradorException = class(Exception)
   end;
 
+  TDMLOperation = (dmInsert, dmUpdate);
+
+  THttpAction = (haGet, haPost);
+
   TNameTranslation = record
     server: string;
     pdv: string;
@@ -79,6 +83,7 @@ type
     nomePKLocal: string;
     nomePKRemoto: string;
     nomeGenerator: string;
+    usePKLocalMethod: Boolean;
     duasVias: boolean;
     useMultipartParams: boolean;
     clientToServer: boolean;
@@ -86,15 +91,16 @@ type
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
     zippedPost: boolean;
+    postContentOnBody: boolean;
     function getVersionFieldName: string; virtual;
     procedure Log(const aLog: string; aClasse: string = ''); virtual;
     function extraGetUrlParams: String; virtual;
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
     function ultimaVersao: integer; virtual;
-    function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string;
+    function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string; virtual;
     procedure importRecord(node: IXMLDomNode);
-    procedure insertRecord(node: IXMLDomNode);
-    procedure updateRecord(node: IXMLDomNode; id: integer);
+    procedure insertRecord(const aInsertStatement: string);
+    procedure updateRecord(const aUpdateStatement: string; const id: integer);
     function jaExiste(id: integer): boolean;
     function getFieldList(node: IXMLDomNode): string;
     function getFieldUpdateList(node: IXMLDomNode): string;
@@ -137,6 +143,12 @@ type
     function getAdditionalDetailFilter:String; virtual;
     function shouldContinue: boolean;
     procedure onDetailNamesMalformed(configName, tableName: string); virtual;
+    function getIncludeFieldNameOnList(const aDMLOperation: TDMLOperation; const aFieldName: string): boolean; virtual;
+    function getObjectsList: string; virtual;
+    function getUpdateStatement(node: IXMLDomNode; const id: integer): String; virtual;
+    function getInsertStatement(node: IXMLDomNode): String; virtual;
+    procedure BeforePostToServer(ds: TDataSet; Params: TStringList); virtual;
+    function getNewId: Integer; virtual; abstract;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -145,7 +157,7 @@ type
     property CustomParams: ICustomParams read FCustomParams write FCustomParams;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     property stopOnPostRecordError: boolean read FstopOnPostRecordError write FstopOnPostRecordError;
-    function buildRequestURL(nomeRecurso: string; params: string = ''): string; virtual; abstract;
+    function buildRequestURL(nomeRecurso: string; params: string = ''; httpAction: THttpAction = haGet): string; virtual; abstract;
     procedure getDadosAtualizados(http: TIdHTTP = nil);
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
     procedure migrateSingletonTableToRemote;
@@ -170,6 +182,11 @@ uses AguardeFormUn, ComObj;
 function TDataIntegradorModuloWeb.extraGetUrlParams: String;
 begin
   result := '';
+end;
+
+function TDataIntegradorModuloWeb.getObjectsList: string;
+begin
+  Result := '/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular);
 end;
 
 procedure TDataIntegradorModuloWeb.getDadosAtualizados(http: TIdHTTP = nil);
@@ -197,7 +214,7 @@ begin
     begin
       doc := CoDOMDocument60.Create;
       doc.loadXML(xmlContent);
-      list := doc.selectNodes('/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular));
+      list := doc.selectNodes(Self.getObjectsList);
       numRegistros := list.length;
       if notifier <> nil then
         notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
@@ -232,19 +249,35 @@ end;
 procedure TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode);
 var
   id: integer;
+  statement: string;
 begin
   if not singleton then
   begin
-    id := strToInt(node.selectSingleNode(dasherize(nomePKRemoto)).text);
-    dmPrincipal.startTransaction;
-    try
-      if jaExiste(id) then
-        updateRecord(node, id)
-      else
-        insertRecord(node);
-      dmPrincipal.commit;
-    except
-      dmPrincipal.rollBack;
+    id := strToIntDef(node.selectSingleNode(dasherize(nomePKRemoto)).text, -1);
+    if id >= 0 then
+    begin
+      dmPrincipal.startTransaction;
+      try
+        if jaExiste(id) then
+        begin
+          statement := Self.GetUpdateStatement(node, id);
+          Self.updateRecord(statement, id);
+        end
+        else
+        begin
+          statement := Self.getInsertStatement(node);
+          insertRecord(statement);
+        end;
+
+        dmPrincipal.commit;
+      except
+        on E:Exception do
+        begin
+          dmPrincipal.rollBack;
+          if Self.DataLog <> nil then
+            Self.DataLog.log(Format('Erro ao importar a tabela "%s": "%s". '+ #13#10 + 'Comando: "%s"', [self.nomeTabela, e.Message, statement]));
+        end;
+      end;
     end;
   end
   else
@@ -279,13 +312,23 @@ begin
 
 end;
 
-procedure TDataIntegradorModuloWeb.updateRecord(node: IXMLDomNode; id: integer);
+function TDataIntegradorModuloWeb.getUpdateStatement(node: IXMLDomNode; const id: integer): String;
+begin
+  if duasVias then
+    Result := getUpdateBaseSQL(node) + ' WHERE idRemoto = ' + IntToStr(id)
+  else
+    Result := getUpdateBaseSQL(node) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
+end;
+
+function TDataIntegradorModuloWeb.getInsertStatement(node: IXMLDomNode): String;
+begin
+  Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node);
+end;
+
+procedure TDataIntegradorModuloWeb.updateRecord(const aUpdateStatement: string; const id: integer);
 begin
   beforeUpdateRecord(id);
-  if duasVias then
-    dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE idRemoto = ' + IntToStr(id), 3)
-  else
-    dmPrincipal.execSQL(getUpdateBaseSQL(node) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id), 3);
+  dmPrincipal.execSQL(aUpdateStatement);
 end;
 
 procedure TDataIntegradorModuloWeb.UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
@@ -321,8 +364,8 @@ begin
                           QuotedStr('S') + ', idRemoto = ' + vIdRemoto +
                           ' WHERE salvouRetaguarda = ''N'' and ' + pTabelasDetalhe[i].nomePK + ' = ' + vPkLocal) ;
       end;
-      if Length(pTabelasDetalhe[i].tabelasDetalhe) > 0 then
-         Self.UpdateRecordDetalhe(vNode, pTabelasDetalhe[i].tabelasDetalhe);
+      if (Length(pTabelasDetalhe[i].tabelasDetalhe) > 0) and (vNode <> nil) then
+        Self.UpdateRecordDetalhe(vNode, pTabelasDetalhe[i].tabelasDetalhe);
     end;
   except
     raise;
@@ -341,9 +384,9 @@ begin
   result := 'UPDATE ' + nomeTabela + getFieldUpdateList(node);
 end;
 
-procedure TDataIntegradorModuloWeb.insertRecord(node: IXMLDomNode);
+procedure TDataIntegradorModuloWeb.insertRecord(const aInsertStatement: string);
 begin
-  dmPrincipal.execSQL('INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node));
+  dmPrincipal.execSQL(aInsertStatement);
 end;
 
 function TDataIntegradorModuloWeb.getFieldList(node: IXMLDomNode): string;
@@ -352,7 +395,7 @@ var
   name: string;
 begin
   result := '(';
-  if duasVias and (nomeGenerator <> '') then
+  if duasVias and ((nomeGenerator <> '') or (usePKLocalMethod)) then
     result := result + nomePKLocal + ', ';
   if duasVias then
     result := result + 'salvouRetaguarda, ';
@@ -360,7 +403,8 @@ begin
   begin
     name := translateFieldNameServerToPdv(node.childNodes.item[i]);
     if name <> '*' then
-      result := result + name + ', ';
+      if Self.getIncludeFieldNameOnList(dmInsert, name) then
+        result := result + name + ', ';
   end;
   result := copy(result, 0, length(result)-2);
   result := result + getFieldAdditionalList(node);
@@ -373,15 +417,21 @@ var
   name: string;
 begin
   result := '(';
-  if duasVias and (nomeGenerator <> '') then
-    result := result + 'gen_id(' + nomeGenerator + ',1), ';
+  if duasVias and ((nomeGenerator <> '') or (usePKLocalMethod)) then
+  begin
+    if nomeGenerator <> '' then
+      result := result + 'gen_id(' + nomeGenerator + ',1), '
+    else
+      Result := Result + IntToStr(getNewId) + ', ';
+  end;
   if duasVias then
     result := result + QuotedStr('S') + ', ';
   for i := 0 to node.childNodes.length - 1 do
   begin
     name := translateFieldNameServerToPdv(node.childNodes.item[i]);
     if name <> '*' then
-      result := result + translateFieldValue(node.childNodes.item[i]) + ', ';
+      if Self.getIncludeFieldNameOnList(dmInsert, name) then
+        result := result + translateFieldValue(node.childNodes.item[i]) + ', ';
   end;
   result := copy(result, 0, length(result)-2);
   result := result + getFieldAdditionalValues(node);
@@ -398,11 +448,17 @@ begin
   begin
     name := translateFieldNameServerToPdv(node.childNodes.item[i]);
     if name <> '*' then
-      result := result + ' ' + translateFieldNameServerToPdv(node.childNodes.item[i]) + ' = ' +
-        translateFieldValue(node.childNodes.item[i]) + ', ';
+      if Self.getIncludeFieldNameOnList(dmUpdate, name) then
+        result := result + ' ' + translateFieldNameServerToPdv(node.childNodes.item[i]) + ' = ' +
+          translateFieldValue(node.childNodes.item[i]) + ', ';
   end;
   result := copy(result, 0, length(result)-2);
   result := result + getFieldAdditionalUpdateList(node);
+end;
+
+function TDataIntegradorModuloWeb.getIncludeFieldNameOnList(const aDMLOperation: TDMLOperation; const aFieldName: string): boolean;
+begin
+  Result := True;
 end;
 
 function TDataIntegradorModuloWeb.getRequestUrlForAction(toSave: boolean; versao: integer = -1): string;
@@ -410,10 +466,16 @@ var
   nomeRecurso: string;
 begin
   if toSave then
-    nomeRecurso := nomeActionSave
+  begin
+    nomeRecurso := nomeActionSave;
+    Result := buildRequestURL(nomeRecurso, '', haPost);
+  end
   else
+  begin
     nomeRecurso := nomeActionGet;
-  result := buildRequestURL(nomeRecurso);
+    Result := buildRequestURL(nomeRecurso);
+  end;
+
   if versao > -1 then
     result := result + '&version=' + IntToStr(versao);
 end;
@@ -512,6 +574,11 @@ begin
   //
 end;
 
+procedure TDataIntegradorModuloWeb.BeforePostToServer(ds: TDataSet; Params: TStringList);
+begin
+  //
+end;
+
 function TDataIntegradorModuloWeb.getTimeoutValue: integer;
 begin
   Result := 30000;
@@ -540,11 +607,12 @@ var
   url: string;
   criouHttp: boolean;
   log: string;
+  pStream: TStringStream;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
   criouHTTP := false;
-  idRemoto := 0;
+  idRemoto := -1;
   if http = nil then
   begin
     criouHTTP := true;
@@ -565,13 +633,14 @@ begin
       if (Self.FthreadControl <> nil) and (not Self.FthreadControl.getShouldContinue) then
         break;
       try
+        Self.BeforePostToServer(ds, Params);
         if useMultipartParams then
         begin
           multiPartParams := TIdMultiPartFormDataStream.Create;
           try
             stream := TStringStream.Create('');
             prepareMultipartParams(ds, params, multipartParams);
-            http.Post(getRequestUrlForAction(true), multipartParams, stream);
+            http.Post(getRequestUrlForAction(true, -1), multipartParams, stream);
             xmlContent := stream.ToString;
           finally
             MultipartParams.Free;
@@ -579,12 +648,11 @@ begin
         end
         else
         begin
-          url := getRequestUrlForAction(true);
+          url := getRequestUrlForAction(true, -1);
           {
             A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
             e precisa ser garantido que o post está de fato indo zipado.
           }
-
           if zippedPost then
           begin
             http.Request.ContentEncoding := 'gzip';
@@ -606,7 +674,18 @@ begin
           end
           else
           begin
-            xmlContent := http.Post(url, Params);
+            if not postContentOnBody then
+               xmlContent := http.Post(url, Params)
+            else
+            begin
+              pStream := TStringStream.Create;
+              try
+                Params.SaveToStream(pStream, TEncoding.UTF8);
+                xmlContent := http.Post(url, pStream);
+              finally
+                pStream.Free;
+              end;
+            end;
           end;
         end;
         sucesso := true;
@@ -628,8 +707,13 @@ begin
 
           if duasVias then
           begin
-            idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text);
-            txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
+            if doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
+              idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
+            else
+              idRemoto := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
+
+            if idRemoto > 0 then
+              txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
           end;
 
           txtUpdate := txtUpdate + ' WHERE salvouRetaguarda = ''N'' and ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
@@ -643,7 +727,7 @@ begin
             dmPrincipal.commit;
           end;
 
-          if Length(TabelasDetalhe) > 0 then
+          if (Length(TabelasDetalhe) > 0) and (doc.selectSingleNode(dasherize(nomeSingularSave)) <> nil) then
              Self.UpdateRecordDetalhe(doc.selectSingleNode(dasherize(nomeSingularSave)), TabelasDetalhe);
 
         end;
@@ -658,7 +742,7 @@ begin
             log :=  Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: %s.',[ClassName, e.ErrorCode, e.ErrorMessage]);
 
           Self.log(log, 'Sync');
-          raise EIntegradorException.Create(log) ; //Logou, agora manda pra cima
+          raise EIntegradorException.Create(log) ; //Logou, agorra manda pra cima
         end;
         on E: Exception do
         begin
@@ -694,23 +778,26 @@ var
   XML: IXMLDocument;
 begin
   Result := EmptyStr;
-  CoInitialize(nil);
-  XML := TXMLDocument.Create(Self);
-  try
-    XML.LoadFromXML(aXML);
-    list := XML.ChildNodes;
-    if list.FindNode('errors') <> nil then
-    begin
-      list := list.FindNode('errors').ChildNodes;
-      if list <> nil  then
+  if Trim(aXML) <> EmptyStr then
+  begin
+    CoInitialize(nil);
+    XML := TXMLDocument.Create(Self);
+    try
+      XML.LoadFromXML(aXML);
+      list := XML.ChildNodes;
+      if list.FindNode('errors') <> nil then
       begin
-        node := list.FindNode('error');
-        if node <> nil then
-          Result := node.Text;
+        list := list.FindNode('errors').ChildNodes;
+        if list <> nil  then
+        begin
+          node := list.FindNode('error');
+          if node <> nil then
+            Result := node.Text;
+        end;
       end;
+    finally
+      CoUninitialize;
     end;
-  finally
-    CoUninitialize;
   end;
 end;
 
@@ -910,7 +997,10 @@ begin
   else
     for i := low(translations) to high(translations) do
       if translations[i].server = underscorize(serverName) then
+      begin
         result := translations[i].pdv;
+        break;
+      end;
 end;
 
 procedure TDataIntegradorModuloWeb.DataModuleCreate(Sender: TObject);
@@ -923,8 +1013,10 @@ begin
   nomePKRemoto := 'id';
   SetLength(tabelasDependentes, 0);
   nomeGenerator := '';
+  usePKLocalMethod := false;
   useMultipartParams := false;
   zippedPost := true;
+  postContentOnBody := False;
   FstopOnPostRecordError := true;
 end;
 

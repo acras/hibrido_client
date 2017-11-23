@@ -130,43 +130,48 @@ var
   http: TidHTTP;
   dimw: TDataIntegradorModuloWeb;
 begin
-  dm := getNewDataPrincipal;
-  http := getHTTPInstance;
+  CoInitializeEx(nil, 0);
   try
-    for i := 0 to length(getterBlocks) - 1 do
-    begin
-      if not Self.ShouldContinue then
-        Break;
+    dm := getNewDataPrincipal;
+    http := getHTTPInstance;
+    try
+      for i := 0 to length(getterBlocks) - 1 do
+      begin
+        if not Self.ShouldContinue then
+          Break;
 
-      block := getterBlocks[i];
-      dm.startTransaction;
-      try
-        for j := 0 to length(block) - 1 do
-        begin
-          if not Self.ShouldContinue then
-            Break;
+        block := getterBlocks[i];
+        dm.startTransaction;
+        try
+          for j := 0 to length(block) - 1 do
+          begin
+            if not Self.ShouldContinue then
+              Break;
 
-          dimw := block[j].Create(nil);
-          try
-            dimw.notifier := Self.Fnotifier;
-            dimw.dmPrincipal := dm;
-            dimw.threadcontrol := Self.FThreadControl;
-            dimw.CustomParams := Self.FCustomParams;
-            dimw.DataLog := Self.FDataLog;
-            dimw.getDadosAtualizados(http);
-            if Assigned(onStepGetters) then onStepGetters(dimw.getHumanReadableName, i+1, length(getterBlocks));
-          finally
-            dimw.free;
+            dimw := block[j].Create(nil);
+            try
+              dimw.notifier := Self.Fnotifier;
+              dimw.dmPrincipal := dm;
+              dimw.threadcontrol := Self.FThreadControl;
+              dimw.CustomParams := Self.FCustomParams;
+              dimw.DataLog := Self.FDataLog;
+              dimw.getDadosAtualizados(http);
+              if Assigned(onStepGetters) then onStepGetters(dimw.getHumanReadableName, i+1, length(getterBlocks));
+            finally
+              dimw.free;
+            end;
           end;
+          dm.commit;
+        except
+          dm.rollback;
         end;
-        dm.commit;
-      except
-        dm.rollback;
       end;
+    finally
+      dm := nil;
+      http := nil;
     end;
   finally
-    dm := nil;
-    http := nil;
+    CoUninitialize;
   end;
 end;
 
