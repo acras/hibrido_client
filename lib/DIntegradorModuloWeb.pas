@@ -8,7 +8,7 @@ uses
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
-  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc;
+  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, Data.DBXJSON, HTTPApp;
 
 type
   EIntegradorException = class(Exception)
@@ -17,6 +17,8 @@ type
   TDMLOperation = (dmInsert, dmUpdate);
   THttpAction = (haGet, haPost);
   TParamsType = (ptParam, ptJSON);
+
+  TAnonymousMethod = reference to procedure(aDataSet: TDataSet);
 
   TNameTranslation = record
     server: string;
@@ -64,6 +66,7 @@ type
     FthreadControl: IThreadControl;
     FCustomParams: ICustomParams;
     FstopOnPostRecordError: boolean;
+    FDetailList: TDictionary<String, TJsonArray>;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -75,6 +78,11 @@ type
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
+    procedure addDetailsToJsonList(aDs: TDataSet);
+    procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe);
+    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aNestedAttribute: string = ''): TJsonObject;
+    procedure addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
+    procedure RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod);
   protected
     FDataLog: ILog;
     nomeTabela: string;
@@ -87,6 +95,7 @@ type
     duasVias: boolean;
     useMultipartParams: boolean;
     clientToServer: boolean;
+    encodeJsonValues : boolean;
     tabelasDependentes: array of TTabelaDependente;
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
@@ -333,7 +342,7 @@ procedure TDataIntegradorModuloWeb.UpdateRecordDetalhe(pNode: IXMLDomNode; pTabe
 var
    i,j : integer;
    vNode : IXMLDomNode;
-   vNodeList, List: IXMLDOMNodeList;
+   vNodeList: IXMLDOMNodeList;
    vIdRemoto, vPkLocal : String;
    vNomePlural, vNomeSingular: string;
 begin
@@ -582,6 +591,93 @@ begin
     Abort;
 end;
 
+procedure TDataIntegradorModuloWeb.addDetailsToJsonList(aDs: TDataSet);
+var
+  i : integer;
+begin
+  for i := low(Self.tabelasDetalhe) to high(Self.tabelasDetalhe) do
+    Self.SelectDetails(aDs.fieldByName(nomePKLocal).AsInteger, Self.tabelasDetalhe[i]);
+end;
+
+procedure TDataIntegradorModuloWeb.SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe);
+var
+  jsonArrayDetails: TJSONArray;
+begin
+  RunDataSet(aValorPk, aTabelaDetalhe,
+             procedure (aDataSet: TDataSet)
+             var
+               i: integer;
+             begin
+               if not Self.FDetailList.ContainsKey(aTabelaDetalhe.nomeParametro) then
+               begin
+                 jsonArrayDetails := TJSONArray.Create;
+                 Self.FDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
+               end
+               else
+                 jsonArrayDetails := Self.FDetailList.Items[aTabelaDetalhe.nomeParametro];
+               jsonArrayDetails.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, aTabelaDetalhe.nomeParametro));
+               for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
+                 SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePK).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
+            end);
+end;
+
+
+procedure TDataIntegradorModuloWeb.RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod);
+var
+  qry: TSQLDataSet;
+begin
+  qry := dmPrincipal.getQuery;
+  try
+    qry.commandText := 'SELECT * FROM ' + aTabelaDetalhe.nomeTabela + ' where ' + aTabelaDetalhe.nomeFK +
+      ' = ' + IntToStr(aValorPK) + self.getAdditionalDetailFilter;
+    qry.Open;
+    while not qry.Eof do
+    begin
+      aProc(qry);
+      qry.Next;
+    end;
+  finally
+    FreeAndNil(qry);
+  end;
+end;
+
+
+
+function TDataIntegradorModuloWeb.getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aNestedAttribute: string = ''): TJsonObject;
+var
+  i: integer;
+  nomeCampo, nome, valor: string;
+begin
+  Result := TJsonObject.Create;
+  for i := 0 to translations.size-1 do
+  begin
+    nomeCampo := translations.get(i).pdv;
+    if aDs.FindField(nomeCampo) <> nil then
+    begin
+      nome := translations.get(i).server;
+      valor := translateValueToServer(translations.get(i), translations.get(i).pdv,
+          aDs.fieldByName(translations.get(i).pdv), aNestedAttribute, translations.get(i).fkName);
+      if Self.encodeJsonValues then
+        Result.AddPair(nome, HTTPEncode(valor))
+      else
+        Result.AddPair(nome, valor);
+    end;
+  end;
+end;
+
+procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
+var
+  JMaster, JResponse: TJsonObject;
+  Item: TPair<string, TJsonArray>;
+begin
+  JMaster := Self.getJsonObject(aDs, Self.translations);
+  JResponse := TJSONObject.Create;
+  jResponse.AddPair(Self.nomeSingularSave, JMaster);
+  for Item in Self.FDetailList do
+    JMaster.AddPair(item.Key, Item.Value);
+  apStream.WriteString(JResponse.ToString);
+end;
+
 function TDataIntegradorModuloWeb.post(ds: TDataSet; http: TidHTTP; url: string): string;
 var
   params: TStringList;
@@ -604,8 +700,8 @@ begin
   begin
     pStream := TStringStream.Create;
     try
-      //TODO buscar este pStrem já como JSON
-      //Params.SaveToStream(pStream, TEncoding.UTF8);
+      Self.addDetailsToJsonList(ds);
+      Self.addMasterTableToJson(ds, pStream);
       result := http.Post(url, pStream);
     finally
       pStream.Free;
@@ -623,7 +719,7 @@ var
   idRemoto: integer;
   txtUpdate: string;
   sucesso: boolean;
-  strs, stream: TStringStream;
+  stream: TStringStream;
   url: string;
   criouHttp: boolean;
   log: string;
@@ -785,25 +881,18 @@ end;
 procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer;
   params: TStringList;
   tabelaDetalhe: TTabelaDetalhe);
-var
-  qry: TSQLDataSet;
-  i: integer;
 begin
-  qry := dmPrincipal.getQuery;
-  try
-    qry.commandText := 'SELECT * FROM ' + tabelaDetalhe.nomeTabela + ' where ' + tabelaDetalhe.nomeFK +
-      ' = ' + IntToStr(valorPK) + self.getAdditionalDetailFilter;
-    qry.Open;
-    while not qry.Eof do
-    begin
-      addTranslatedParams(qry, params, tabelaDetalhe.translations, tabelaDetalhe.nomeParametro);
-      for i := low(tabelaDetalhe.tabelasDetalhe) to high(tabelaDetalhe.tabelasDetalhe) do
-        addTabelaDetalheParams(qry.fieldByName(tabelaDetalhe.nomePK).AsInteger, params, tabelaDetalhe.tabelasDetalhe[i]);
-      qry.Next;
-    end;
-  finally
-    FreeAndNil(qry);
-  end;
+  RunDataSet(valorPk,
+             TabelaDetalhe,
+             procedure (aDataSet: TDataSet)
+             var
+               i: integer;
+             begin
+               addTranslatedParams(aDataSet, params, tabelaDetalhe.translations, tabelaDetalhe.nomeParametro);
+               for i := low(tabelaDetalhe.tabelasDetalhe) to high(tabelaDetalhe.tabelasDetalhe) do
+                 addTabelaDetalheParams(aDataSet.fieldByName(tabelaDetalhe.nomePK).AsInteger, params, tabelaDetalhe.tabelasDetalhe[i]);
+
+            end);
 end;
 
 function TDataIntegradorModuloWeb.getAdditionalDetailFilter: String;
@@ -989,6 +1078,8 @@ begin
   useMultipartParams := false;
   paramsType := ptParam;
   FstopOnPostRecordError := true;
+  Self.FDetailList := TDictionary<String, TJsonArray>.Create;
+  Self.encodeJsonValues := False;
 end;
 
 
@@ -998,6 +1089,7 @@ var
 begin
   for i := Low(Self.tabelasDetalhe) to High(Self.tabelasDetalhe) do
      Self.tabelasDetalhe[i].Free;
+  Self.FDetailList.Free;
   inherited;
 end;
 
