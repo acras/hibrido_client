@@ -601,8 +601,6 @@ begin
     end;
   end;
   if paramsType = ptJSON then
-
-  else
   begin
     pStream := TStringStream.Create;
     try
