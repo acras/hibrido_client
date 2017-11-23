@@ -125,7 +125,6 @@ type
     function getOrderBy: string; virtual;
     procedure addMoreParams(ds: TDataSet; params: TStringList); virtual;
     procedure prepareMultipartParams(ds: TDataSet;
-      params: TStringList;
       multipartParams: TIdMultiPartFormDataStream); virtual; abstract;
     function singleton: boolean;
     function getUpdateBaseSQL(node: IXMLDOMNode): string;
@@ -346,10 +345,16 @@ begin
       vNomeSingular := pTabelasDetalhe[i].nomeSingularDetalhe;
 
       if VNomePlural = EmptyStr then
+      begin
         onDetailNamesMalformed(pTabelasDetalhe[i].nomeTabela, 'NomePlural');
+        exit;
+      end;
 
       if vNomeSingular = EmptyStr then
+      begin
         onDetailNamesMalformed(pTabelasDetalhe[i].nomeTabela, 'NomeSingular');
+        exit;
+      end;
 
       vNode := pNode.selectSingleNode('./' + dasherize(vNomePlural));
       vNodeList := vNode.selectNodes('./' + dasherize(vNomeSingular));
@@ -525,11 +530,7 @@ function TDataIntegradorModuloWeb.translateFieldNameServerToPdv(
 begin
   result := translations.translateServerToPDV(node.nodeName, duasVias);
   if result = '' then
-    {$IFDEF VER150}
-    result := FastReplace(node.nodeName, '-', '');
-    {$ELSE}
     result := StringReplace(node.nodeName, '-', '', [rfReplaceAll]);
-    {$ENDIF}
 end;
 
 function TDataIntegradorModuloWeb.translateFieldNamePdvToServer(
@@ -537,11 +538,7 @@ function TDataIntegradorModuloWeb.translateFieldNamePdvToServer(
 begin
   result := translations.translatepdvToServer(node.nodeName);
   if result = '' then
-    {$IFDEF VER150}
-    result := FastReplace(node.nodeName, '-', '');
-    {$ELSE}
     result := StringReplace(node.nodeName, '-', '', [rfReplaceAll]);
-    {$ENDIF}
 end;
 
 
@@ -639,7 +636,7 @@ begin
           multiPartParams := TIdMultiPartFormDataStream.Create;
           try
             stream := TStringStream.Create('');
-            prepareMultipartParams(ds, params, multipartParams);
+            prepareMultipartParams(ds, multipartParams );
             http.Post(getRequestUrlForAction(true, -1), multipartParams, stream);
             xmlContent := stream.ToString;
           finally
@@ -649,53 +646,23 @@ begin
         else
         begin
           url := getRequestUrlForAction(true, -1);
-          {
-            A implementação do zippedPost ainda não está pronta. Ela deve ser mais bem testada em vários casos
-            e precisa ser garantido que o post está de fato indo zipado.
-          }
-          if zippedPost then
-          begin
-            http.Request.ContentEncoding := 'gzip';
-            zippedParams := TMemoryStream.Create;
-            zipper := TAbZipper.Create(nil);
-            try
-              strs := TStringStream.Create(utf8Encode(params.ToString), TEncoding.UTF8);
-              zipper.ArchiveType := atGzip;
-              zipper.ForceType := true;
-              zipper.Stream := zippedParams;
-              zipper.AddFromStream('', strs);
-              Self.log('Pré post do registro', 'TDataIntegradorModuloWeb');
-              xmlContent := http.Post(url, zippedParams);
-              Self.log('Pós post do registro', 'TDataIntegradorModuloWeb');
-            finally
-              freeAndNil(zipper);
-              freeAndNil(zippedParams);
-            end;
-          end
+          if not postContentOnBody then
+             xmlContent := http.Post(url, Params)
           else
           begin
-            if not postContentOnBody then
-               xmlContent := http.Post(url, Params)
-            else
-            begin
-              pStream := TStringStream.Create;
-              try
-                Params.SaveToStream(pStream, TEncoding.UTF8);
-                xmlContent := http.Post(url, pStream);
-              finally
-                pStream.Free;
-              end;
+            pStream := TStringStream.Create;
+            try
+              Params.SaveToStream(pStream, TEncoding.UTF8);
+              xmlContent := http.Post(url, pStream);
+            finally
+              pStream.Free;
             end;
           end;
         end;
         sucesso := true;
         CoInitialize(nil);
         try
-          {$IFDEF VER150}
-          doc := CoDOMDocument.Create;
-          {$ELSE}
           doc := CoDOMDocument60.Create;
-          {$ENDIF}
           doc.loadXML(xmlContent);
           result := doc;
         finally
@@ -1060,23 +1027,12 @@ begin
     if field.DataType in [ftFloat, ftBCD, ftFMTBCD, ftCurrency] then
     begin
       try
-        {$IFDEF VER150}
-        DecimalSeparator := '.';
-        ThousandSeparator := #0;
-        {$ELSE}
         FormatSettings.DecimalSeparator := '.';
         FormatSettings.ThousandSeparator := #0;
-        {$ENDIF}
         result := field.AsString;
       finally
-
-        {$IFDEF VER150}
-        DecimalSeparator := ',';
-        ThousandSeparator := '.';
-        {$ELSE}
         FormatSettings.DecimalSeparator := ',';
         FormatSettings.ThousandSeparator := '.';
-        {$ENDIF}
       end;
     end
     else if field.DataType in [ftDateTime, ftTimeStamp] then
