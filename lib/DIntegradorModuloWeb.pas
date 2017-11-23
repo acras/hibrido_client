@@ -7,7 +7,7 @@ uses
   DB, IdMultipartFormData, IdBaseComponent, IdComponent, IdTCPConnection, forms,
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
-  ISincronizacaoNotifierUnit, Data.SqlExpr, ABZipper, ABUtils, AbZipTyp, AbArcTyp, AbZipPrc,
+  ISincronizacaoNotifierUnit, Data.SqlExpr,
   Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc;
 
 type
@@ -15,8 +15,8 @@ type
   end;
 
   TDMLOperation = (dmInsert, dmUpdate);
-
   THttpAction = (haGet, haPost);
+  TParamsType = (ptParam, ptJSON);
 
   TNameTranslation = record
     server: string;
@@ -90,8 +90,7 @@ type
     tabelasDependentes: array of TTabelaDependente;
     tabelasDetalhe: array of TTabelaDetalhe;
     offset: integer;
-    zippedPost: boolean;
-    postContentOnBody: boolean;
+    paramsType: TParamsType;
     function getVersionFieldName: string; virtual;
     procedure Log(const aLog: string; aClasse: string = ''); virtual;
     function extraGetUrlParams: String; virtual;
@@ -146,8 +145,8 @@ type
     function getObjectsList: string; virtual;
     function getUpdateStatement(node: IXMLDomNode; const id: integer): String; virtual;
     function getInsertStatement(node: IXMLDomNode): String; virtual;
-    procedure BeforePostToServer(ds: TDataSet; Params: TStringList); virtual;
     function getNewId: Integer; virtual; abstract;
+    function post(ds: TDataSet; http: TidHTTP; url: string): string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -571,11 +570,6 @@ begin
   //
 end;
 
-procedure TDataIntegradorModuloWeb.BeforePostToServer(ds: TDataSet; Params: TStringList);
-begin
-  //
-end;
-
 function TDataIntegradorModuloWeb.getTimeoutValue: integer;
 begin
   Result := 30000;
@@ -588,10 +582,43 @@ begin
     Abort;
 end;
 
+function TDataIntegradorModuloWeb.post(ds: TDataSet; http: TidHTTP; url: string): string;
+var
+  params: TStringList;
+  pStream: TStringStream;
+begin
+  result := '';
+  if paramsType = ptParam then
+  begin
+    params := TStringList.Create;
+    try
+      addTranslatedParams(ds, params, translations);
+      addDetails(ds, params);
+      addMoreParams(ds, params);
+      result := http.Post(url, Params);
+    finally
+      params.Free;
+    end;
+  end;
+  if paramsType = ptJSON then
+
+  else
+  begin
+    pStream := TStringStream.Create;
+    try
+      //TODO buscar este pStrem já como JSON
+      //Params.SaveToStream(pStream, TEncoding.UTF8);
+      result := http.Post(url, pStream);
+    finally
+      pStream.Free;
+    end;
+  end;
+
+end;
+
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
   var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
 var
-  params: TStringList;
   multipartParams: TidMultipartFormDataStream;
   xmlContent: string;
   doc: IXMLDomDocument2;
@@ -599,12 +626,9 @@ var
   txtUpdate: string;
   sucesso: boolean;
   strs, stream: TStringStream;
-  zippedParams: TMemoryStream;
-  zipper: TAbZipper;
   url: string;
   criouHttp: boolean;
   log: string;
-  pStream: TStringStream;
 begin
   Self.log('Iniciando save record para remote. Classe: ' + ClassName, 'Sync');
   salvou := false;
@@ -619,18 +643,13 @@ begin
     http.ReadTimeout := Self.getTimeoutValue;
   end;
 
-  params := TStringList.Create;
   try
-    addTranslatedParams(ds, params, translations);
-    addDetails(ds, params);
-    addMoreParams(ds, params);
     sucesso := false;
     while (not sucesso) do
     begin
       if (Self.FthreadControl <> nil) and (not Self.FthreadControl.getShouldContinue) then
         break;
       try
-        Self.BeforePostToServer(ds, Params);
         if useMultipartParams then
         begin
           multiPartParams := TIdMultiPartFormDataStream.Create;
@@ -646,18 +665,7 @@ begin
         else
         begin
           url := getRequestUrlForAction(true, -1);
-          if not postContentOnBody then
-             xmlContent := http.Post(url, Params)
-          else
-          begin
-            pStream := TStringStream.Create;
-            try
-              Params.SaveToStream(pStream, TEncoding.UTF8);
-              xmlContent := http.Post(url, pStream);
-            finally
-              pStream.Free;
-            end;
-          end;
+          xmlContent := post(ds, http, url);
         end;
         sucesso := true;
         CoInitialize(nil);
@@ -723,7 +731,6 @@ begin
   finally
     if criouHttp then
       FreeAndNil(http);
-    FreeAndNil(params);
   end;
 end;
 
@@ -982,8 +989,7 @@ begin
   nomeGenerator := '';
   usePKLocalMethod := false;
   useMultipartParams := false;
-  zippedPost := true;
-  postContentOnBody := False;
+  paramsType := ptParam;
   FstopOnPostRecordError := true;
 end;
 
