@@ -497,10 +497,6 @@ var
 begin
   if (node.attributes.getNamedItem('nil') <> nil) and (node.attributes.getNamedItem('nil').text = 'true') then
     result := 'NULL'
-  else if node.nodeName = nomePKLocal then
-  begin
-    result := IntToStr(getNewId);
-  end
   else if (node.attributes.getNamedItem('type') <> nil) then
   begin
     typedTranslate := translateTypeValue(node.attributes.getNamedItem('type').text, node.text);
@@ -624,8 +620,6 @@ begin
     http.OnWork := Self.OnWorkHandler;
     http.ConnectTimeout := Self.getTimeoutValue;
     http.ReadTimeout := Self.getTimeoutValue;
-    http.Request.Clear;
-    http.Disconnect;    
   end;
 
   params := TStringList.Create;
@@ -715,10 +709,8 @@ begin
           begin
             if doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
               idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
-            else if doc.selectSingleNode('//hash//id') <> nil then                 
-              idRemoto := StrToInt(doc.selectSingleNode('//hash//id').text)
             else
-              idRemoto := StrToInt(doc.selectSingleNode('hash').selectSingleNode('id').text);
+              idRemoto := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
 
             if idRemoto > 0 then
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
