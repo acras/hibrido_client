@@ -45,6 +45,14 @@ type
     nomeFK: string;
   end;
 
+  TJSONArrayContainer = class
+  private
+    FJSonArray: TJsonArray;
+  public
+    nomePluralDetalhe: string;
+    function getJsonArray: TJsonArray;
+  end;
+
   TTabelaDetalhe = class
   public
     nomeTabela: string;
@@ -66,7 +74,6 @@ type
     FthreadControl: IThreadControl;
     FCustomParams: ICustomParams;
     FstopOnPostRecordError: boolean;
-    FDetailList: TDictionary<String, TJsonArray>;
     procedure SetdmPrincipal(const Value: IDataPrincipal);
     function getdmPrincipal: IDataPrincipal;
 
@@ -78,12 +85,9 @@ type
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
-    procedure addDetailsToJsonList(aDs: TDataSet);
-    procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe);
-    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aNestedAttribute: string = ''): TJsonObject;
-    procedure addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
-    procedure RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod);
+
   protected
+    FDetailList: TDictionary<String, TJSONArrayContainer>;
     FDataLog: ILog;
     nomeTabela: string;
     nomeSingular: string;
@@ -156,6 +160,13 @@ type
     function getInsertStatement(node: IXMLDomNode): String; virtual;
     function getNewId: Integer; virtual; abstract;
     function post(ds: TDataSet; http: TidHTTP; url: string): string; virtual;
+    procedure addDetailsToJsonList(aDs: TDataSet); virtual;
+    procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe); virtual;
+    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aNestedAttribute: string = ''): TJsonObject; virtual;
+    procedure addMasterTableToJson(aDs: TDataSet; apStream: TStringStream); virtual;
+    procedure RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod); virtual;
+    function GetIdRemoto(aDoc: IXMLDomDocument2): integer;
+    function getXMLContentAsXMLDom(const aXMLContent: string): IXMLDomDocument2;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -601,7 +612,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe);
 var
-  jsonArrayDetails: TJSONArray;
+  jsonArrayDetails: TJSONArrayContainer;
 begin
   RunDataSet(aValorPk, aTabelaDetalhe,
              procedure (aDataSet: TDataSet)
@@ -610,12 +621,13 @@ begin
              begin
                if not Self.FDetailList.ContainsKey(aTabelaDetalhe.nomeParametro) then
                begin
-                 jsonArrayDetails := TJSONArray.Create;
+                 jsonArrayDetails := TJSONArrayContainer.Create;
+                 jsonArrayDetails.nomePluralDetalhe := aTabelaDetalhe.nomePluralDetalhe;
                  Self.FDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
                end
                else
                  jsonArrayDetails := Self.FDetailList.Items[aTabelaDetalhe.nomeParametro];
-               jsonArrayDetails.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, aTabelaDetalhe.nomeParametro));
+               jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, aTabelaDetalhe.nomeParametro));
                for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
                  SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePK).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
             end);
@@ -668,13 +680,13 @@ end;
 procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
 var
   JMaster, JResponse: TJsonObject;
-  Item: TPair<string, TJsonArray>;
+  Item: TPair<string, TJSONArrayContainer>;
 begin
   JMaster := Self.getJsonObject(aDs, Self.translations);
   JResponse := TJSONObject.Create;
   jResponse.AddPair(Self.nomeSingularSave, JMaster);
   for Item in Self.FDetailList do
-    JMaster.AddPair(item.Key, Item.Value);
+    JMaster.AddPair(item.Key, Item.Value.getJsonArray);
   apStream.WriteString(JResponse.ToString);
 end;
 
@@ -710,16 +722,37 @@ begin
 
 end;
 
+function TDataIntegradorModuloWeb.GetIdRemoto(aDoc: IXMLDomDocument2): integer;
+begin
+  Result := -1;
+  if aDoc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
+    Result := strToInt(aDoc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
+  else
+    Result := StrToInt(aDoc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
+end;
+
+function TDataIntegradorModuloWeb.getXMLContentAsXMLDom(const aXMLContent: string): IXMLDomDocument2;
+begin
+  CoInitialize(nil);
+  try
+    Result := CoDOMDocument60.Create;
+    Result.loadXML(aXmlContent);
+  finally
+    CoUninitialize;
+  end;
+end;
+
+
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
   var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
 var
   multipartParams: TidMultipartFormDataStream;
   xmlContent: string;
-  doc: IXMLDomDocument2;
   idRemoto: integer;
   txtUpdate: string;
   sucesso: boolean;
   stream: TStringStream;
+  doc: IXMLDomDocument2;
   url: string;
   criouHttp: boolean;
   log: string;
@@ -762,25 +795,14 @@ begin
           xmlContent := post(ds, http, url);
         end;
         sucesso := true;
-        CoInitialize(nil);
-        try
-          doc := CoDOMDocument60.Create;
-          doc.loadXML(xmlContent);
-          result := doc;
-        finally
-          CoUninitialize;
-        end;
+        Result := Self.getXMLContentAsXMLDom(xmlContent);
         if duasVias or clientToServer then
         begin
           txtUpdate := 'UPDATE ' + nomeTabela + ' SET salvouRetaguarda = ' + QuotedStr('S');
 
           if duasVias then
           begin
-            if doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
-              idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
-            else
-              idRemoto := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
-
+            idRemoto := Self.GetIdRemoto(doc);
             if idRemoto > 0 then
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
           end;
@@ -1078,7 +1100,7 @@ begin
   useMultipartParams := false;
   paramsType := ptParam;
   FstopOnPostRecordError := true;
-  Self.FDetailList := TDictionary<String, TJsonArray>.Create;
+  Self.FDetailList := TDictionary<String, TJSONArrayContainer>.Create;
   Self.encodeJsonValues := False;
 end;
 
@@ -1086,9 +1108,12 @@ end;
 destructor TDataIntegradorModuloWeb.Destroy;
 var
   i: integer;
+  Item: TPair<string, TJSONArrayContainer>;
 begin
   for i := Low(Self.tabelasDetalhe) to High(Self.tabelasDetalhe) do
      Self.tabelasDetalhe[i].Free;
+  for Item in Self.FDetailList do
+    Item.Value.Free;
   Self.FDetailList.Free;
   inherited;
 end;
@@ -1257,6 +1282,15 @@ end;
 constructor TTabelaDetalhe.create;
 begin
   translations := TTranslationSet.create(nil);
+end;
+
+{ TJSONArrayContainer }
+
+function TJSONArrayContainer.getJsonArray: TJsonArray;
+begin
+  if Self.FJSonArray = nil then
+    Self.FJSonArray := TJSONArray.Create;
+  Result := Self.FJSonArray;
 end;
 
 end.
