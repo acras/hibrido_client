@@ -649,14 +649,14 @@ var
   nomeCampo, nome, valor: string;
 begin
   Result := TJsonObject.Create;
-  for i := 0 to translations.size-1 do
+  for i := 0 to aTranslations.size-1 do
   begin
-    nomeCampo := translations.get(i).pdv;
+    nomeCampo := aTranslations.get(i).pdv;
     if aDs.FindField(nomeCampo) <> nil then
     begin
-      nome := translations.get(i).server;
-      valor := translateValueToServer(translations.get(i), translations.get(i).pdv,
-          aDs.fieldByName(translations.get(i).pdv), aNestedAttribute, translations.get(i).fkName);
+      nome := aTranslations.get(i).server;
+      valor := translateValueToServer(aTranslations.get(i), aTranslations.get(i).pdv,
+          aDs.fieldByName(aTranslations.get(i).pdv), aNestedAttribute, aTranslations.get(i).fkName);
       if Self.encodeJsonValues then
         Result.AddPair(nome, HTTPEncode(valor))
       else
@@ -707,7 +707,6 @@ begin
       pStream.Free;
     end;
   end;
-
 end;
 
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
@@ -778,7 +777,9 @@ begin
           begin
             if doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
               idRemoto := strToInt(doc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
-            else
+            else if doc.selectSingleNode('//hash//id') <> nil then
+              idRemoto := strToInt(doc.selectSingleNode('//hash//id').text)
+
               idRemoto := StrToInt(doc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
 
             if idRemoto > 0 then
