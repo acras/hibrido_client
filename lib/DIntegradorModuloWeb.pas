@@ -670,7 +670,7 @@ begin
       valor := translateValueToServer(aTranslations.get(i), aTranslations.get(i).pdv,
           aDs.fieldByName(aTranslations.get(i).pdv), aNestedAttribute, aTranslations.get(i).fkName);
       if Self.encodeJsonValues then
-        Result.AddPair(nome, HTTPEncode(valor))
+        Result.AddPair(nome, UTF8Encode(HTTPEncode(valor)))
       else
         Result.AddPair(nome, valor);
     end;
@@ -710,7 +710,7 @@ begin
   end;
   if paramsType = ptJSON then
   begin
-    pStream := TStringStream.Create;
+    pStream := TStringStream.Create('', TEncoding.UTF8);
     try
       Self.addDetailsToJsonList(ds);
       Self.addMasterTableToJson(ds, pStream);
@@ -883,7 +883,7 @@ begin
         begin
           node := list.FindNode('error');
           if node <> nil then
-            Result := node.Text;
+            Result := Utf8Decode(HTTPDecode(node.Text));
         end;
       end;
     finally
