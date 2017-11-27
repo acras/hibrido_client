@@ -50,6 +50,7 @@ type
     FJSonArray: TJsonArray;
   public
     nomePluralDetalhe: string;
+    nomeSingularDetalhe: string;
     function getJsonArray: TJsonArray;
   end;
 
@@ -623,6 +624,7 @@ begin
                begin
                  jsonArrayDetails := TJSONArrayContainer.Create;
                  jsonArrayDetails.nomePluralDetalhe := aTabelaDetalhe.nomePluralDetalhe;
+                 jsonArrayDetails.nomeSingularDetalhe := aTabelaDetalhe.nomeSingularDetalhe;
                  Self.FDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
                end
                else
@@ -734,12 +736,16 @@ end;
 
 function TDataIntegradorModuloWeb.getXMLContentAsXMLDom(const aXMLContent: string): IXMLDomDocument2;
 begin
-  CoInitialize(nil);
-  try
-    Result := CoDOMDocument60.Create;
-    Result.loadXML(aXmlContent);
-  finally
-    CoUninitialize;
+  Result := nil;
+  if aXMLContent <> EmptyStr then
+  begin
+    CoInitialize(nil);
+    try
+      Result := CoDOMDocument60.Create;
+      Result.loadXML(aXmlContent);
+    finally
+      CoUninitialize;
+    end;
   end;
 end;
 
@@ -753,7 +759,6 @@ var
   txtUpdate: string;
   sucesso: boolean;
   stream: TStringStream;
-  doc: IXMLDomDocument2;
   url: string;
   criouHttp: boolean;
   log: string;
@@ -803,7 +808,7 @@ begin
 
           if duasVias then
           begin
-            idRemoto := Self.GetIdRemoto(doc);
+            idRemoto := Self.GetIdRemoto(Result);
             if idRemoto > 0 then
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
           end;
@@ -819,8 +824,8 @@ begin
             dmPrincipal.commit;
           end;
 
-          if (Length(TabelasDetalhe) > 0) and (doc.selectSingleNode(dasherize(nomeSingularSave)) <> nil) then
-             Self.UpdateRecordDetalhe(doc.selectSingleNode(dasherize(nomeSingularSave)), TabelasDetalhe);
+          if (Length(TabelasDetalhe) > 0) and (Result.selectSingleNode(dasherize(nomeSingularSave)) <> nil) then
+             Self.UpdateRecordDetalhe(Result.selectSingleNode(dasherize(nomeSingularSave)), TabelasDetalhe);
 
         end;
       except
@@ -829,7 +834,7 @@ begin
           if e.ErrorCode = 422 then
             log := Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d, Erro: %s.',[ClassName, e.ErrorCode, Self.GetErrorMessage(e.ErrorMessage)])
           else if e.ErrorCode = 500 then
-            log := Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: Erro interno no servidor. ',[ClassName, e.ErrorCode])
+            log := Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: Erro interno no servidor: %s. ',[ClassName, e.ErrorCode, e.ErrorMessage])
           else
             log :=  Format('Erro ao tentar salvar registro. Classe: %s, Código de erro: %d. Erro: %s.',[ClassName, e.ErrorCode, e.ErrorMessage]);
 
@@ -1103,6 +1108,7 @@ begin
   FstopOnPostRecordError := true;
   Self.FDetailList := TDictionary<String, TJSONArrayContainer>.Create;
   Self.encodeJsonValues := False;
+  translations.add('id', 'idremoto');
 end;
 
 
