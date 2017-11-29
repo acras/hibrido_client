@@ -8,7 +8,8 @@ uses
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
-  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, Data.DBXJSON, HTTPApp;
+  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, Data.DBXJSON, HTTPApp,
+  Soap.EncdDecd;
 
 type
   EIntegradorException = class(Exception)
@@ -51,6 +52,8 @@ type
   public
     nomePluralDetalhe: string;
     nomeSingularDetalhe: string;
+    nomeTabela: string;
+    nomePkLocal: string;
     function getJsonArray: TJsonArray;
   end;
 
@@ -625,6 +628,8 @@ begin
                  jsonArrayDetails := TJSONArrayContainer.Create;
                  jsonArrayDetails.nomePluralDetalhe := aTabelaDetalhe.nomePluralDetalhe;
                  jsonArrayDetails.nomeSingularDetalhe := aTabelaDetalhe.nomeSingularDetalhe;
+                 jsonArrayDetails.nomeTabela := aTabelaDetalhe.nomeTabela;
+                 jsonArrayDetails.nomePkLocal := aTabelaDetalhe.nomePK;
                  Self.FDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
                end
                else
@@ -672,7 +677,7 @@ begin
       valor := translateValueToServer(aTranslations.get(i), aTranslations.get(i).pdv,
           aDs.fieldByName(aTranslations.get(i).pdv), aNestedAttribute, aTranslations.get(i).fkName);
       if Self.encodeJsonValues then
-        Result.AddPair(nome, UTF8Encode(HTTPEncode(valor)))
+        Result.AddPair(nome,  EncodeString(UTF8Encode(valor)))
       else
         Result.AddPair(nome, valor);
     end;
@@ -726,12 +731,19 @@ end;
 function TDataIntegradorModuloWeb.GetIdRemoto(aDoc: IXMLDomDocument2): integer;
 begin
   Result := -1;
-  if aDoc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
-    Result := strToInt(aDoc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
-  else if aDoc.selectSingleNode('//hash//id') <> nil then
-    Result := strToInt(aDoc.selectSingleNode('//hash//id').text)
-  else
-    Result := StrToInt(aDoc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
+  try
+    if aDoc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id') <> nil then
+      Result := strToInt(aDoc.selectSingleNode('//' + dasherize(nomeSingularSave) + '//id').text)
+    else if aDoc.selectSingleNode('//hash//id') <> nil then
+      Result := strToInt(aDoc.selectSingleNode('//hash//id').text)
+    else
+      Result := StrToInt(aDoc.selectSingleNode('objects').selectSingleNode('object').selectSingleNode('id').text);
+  except
+    on e: Exception do
+    begin
+      Self.log('Erro ao ler Campo "ID" no XML de retorno, Tabela: ' + nomeTabela + ' - ' + e.Message, 'Sync');
+    end;
+  end;
 end;
 
 function TDataIntegradorModuloWeb.getXMLContentAsXMLDom(const aXMLContent: string): IXMLDomDocument2;
@@ -1130,6 +1142,7 @@ function TDataIntegradorModuloWeb.translateValueToServer(translation: TNameTrans
 var
   lookupIdRemoto: integer;
   fk: string;
+  StringStream: TStringStream;
 begin
   if translation.lookupRemoteTable <> '' then
   begin
@@ -1177,6 +1190,16 @@ begin
         result := 'NULL'
       else
         result := FormatDateTime('yyyy-mm-dd', field.AsDateTime);
+    end
+    else if field.DataType = ftBlob then
+    begin
+      StringStream := TStringStream.Create;
+      try
+        TBlobField(field).SaveToStream(StringStream);
+        result := StringStream.DataString;
+      finally
+        StringStream.Free;
+      end;
     end
     else
       result := field.asString;
