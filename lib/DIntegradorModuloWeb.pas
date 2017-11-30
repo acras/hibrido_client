@@ -58,16 +58,36 @@ type
   end;
 
   TTabelaDetalhe = class
+  private
+    FNomeTabela: string;
+    FnomeFK: string;
+    FnomePK: string;
+    FnomeParametro: string;
+    FnomeSingularDetalhe: string;
+    FnomePluralDetalhe: string;
+  protected
+    function GetNomeTabela: string; virtual;
+    procedure setNomeTabela(const Value: string); virtual;
+    function GetNomeFK: string; virtual;
+    function GetNomePK: string; virtual;
+    procedure setNomeFK(const Value: string); virtual;
+    procedure setNomePK(const Value: string); virtual;
+    function GetNomeParametro: string; virtual;
+    procedure setNomeParametro(const Value: string); virtual;
+    function GetNomePluralDetalhe: string; virtual;
+    function GetNomeSingularDetalhe: string; virtual;
+    procedure setNomePluralDetalhe(const Value: string); virtual;
+    procedure setNomeSingularDetalhe(const Value: string); virtual;
   public
-    nomeTabela: string;
-    nomeFK: string;
-    nomePK: string;
-    nomeParametro: string;
-    nomeSingularDetalhe : string;
-    nomePluralDetalhe : string;
     tabelasDetalhe: array of TTabelaDetalhe;
     translations: TTranslationSet;
     constructor create;
+    property nomeTabela: string read GetNomeTabela write setNomeTabela;
+    property nomeFK: string read GetNomeFK write setNomeFK;
+    property nomePK: string read GetNomePK write setNomePK;
+    property nomeParametro: string read GetNomeParametro write setNomeParametro;
+    property nomeSingularDetalhe: string read GetNomeSingularDetalhe write setNomeSingularDetalhe;
+    property nomePluralDetalhe: string read GetNomePluralDetalhe write setNomePluralDetalhe;
   end;
 
   TDataIntegradorModuloWeb = class(TDataModule)
@@ -78,9 +98,6 @@ type
     FthreadControl: IThreadControl;
     FCustomParams: ICustomParams;
     FstopOnPostRecordError: boolean;
-    procedure SetdmPrincipal(const Value: IDataPrincipal);
-    function getdmPrincipal: IDataPrincipal;
-
     procedure addTabelaDetalheParams(valorPK: integer;
       params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
@@ -171,6 +188,8 @@ type
     procedure RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod); virtual;
     function GetIdRemoto(aDoc: IXMLDomDocument2): integer;
     function getXMLContentAsXMLDom(const aXMLContent: string): IXMLDomDocument2;
+    procedure SetdmPrincipal(const Value: IDataPrincipal); virtual;
+    function getdmPrincipal: IDataPrincipal; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -1312,6 +1331,66 @@ end;
 constructor TTabelaDetalhe.create;
 begin
   translations := TTranslationSet.create(nil);
+end;
+
+function TTabelaDetalhe.GetNomeFK: string;
+begin
+  Result := FnomeFK;
+end;
+
+function TTabelaDetalhe.GetNomeParametro: string;
+begin
+  Result := FnomeParametro;
+end;
+
+function TTabelaDetalhe.GetNomePK: string;
+begin
+  Result := FnomePK;
+end;
+
+function TTabelaDetalhe.GetNomePluralDetalhe: string;
+begin
+  Result := FnomePluralDetalhe;
+end;
+
+function TTabelaDetalhe.GetNomeSingularDetalhe: string;
+begin
+  Result := FnomeSingularDetalhe;
+end;
+
+function TTabelaDetalhe.GetNomeTabela: string;
+begin
+  Result := FNomeTabela;
+end;
+
+procedure TTabelaDetalhe.setNomeFK(const Value: string);
+begin
+  FnomeFK := Value;
+end;
+
+procedure TTabelaDetalhe.setNomeParametro(const Value: string);
+begin
+  FnomeParametro := Value;
+end;
+
+procedure TTabelaDetalhe.setNomePK(const Value: string);
+begin
+  FnomePK := Value;
+end;
+
+procedure TTabelaDetalhe.setNomePluralDetalhe(const Value: string);
+begin
+  FnomePluralDetalhe := Value;
+end;
+
+procedure TTabelaDetalhe.setNomeSingularDetalhe(const Value: string);
+begin
+  FnomeSingularDetalhe := Value;
+end;
+
+procedure TTabelaDetalhe.setNomeTabela(const Value: string);
+begin
+  FNomeTabela := Value;
 end;
 
 { TJSONArrayContainer }
