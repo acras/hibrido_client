@@ -707,7 +707,7 @@ begin
   for I := 0 to aDs.FieldCount - 1 do
   begin
     nome := aDs.Fields[i].FieldName;
-    if aDs.Fields[i].IsNull then
+    if (aDs.Fields[i].IsNull) or (aDs.Fields[i].AsString = '') then
       value := ''
     else
       value := aDs.Fields[i].Value;
