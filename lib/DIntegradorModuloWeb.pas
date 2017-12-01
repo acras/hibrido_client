@@ -9,7 +9,7 @@ uses
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
   Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, Data.DBXJSON, HTTPApp,
-  Soap.EncdDecd;
+  Soap.EncdDecd, Data.DBXJSONReflect;
 
 type
   EIntegradorException = class(Exception)
@@ -106,6 +106,7 @@ type
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
+    function DataSetToArray(aDs: TDataSet): TDictionary<String, String>;
 
   protected
     FDetailList: TDictionary<String, TJSONArrayContainer>;
@@ -144,7 +145,7 @@ type
     function translateTypeValue(fieldType, fieldValue: string): string;
     function translateValueToServer(translation: TNameTranslation;
       fieldName: string; field: TField;
-      nestedAttribute: string = ''; fkName: string = ''): string; virtual;
+      nestedAttribute: string = ''; fkName: string = ''; fieldValue: String = ''): string; virtual;
     function translateValueFromServer(fieldName, value: string): string; virtual;
     procedure redirectRecord(idAntigo, idNovo: integer);
     function getFieldAdditionalList(node: IXMLDomNode): string; virtual;
@@ -183,7 +184,7 @@ type
     function post(ds: TDataSet; http: TidHTTP; url: string): string; virtual;
     procedure addDetailsToJsonList(aDs: TDataSet); virtual;
     procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe); virtual;
-    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aNestedAttribute: string = ''): TJsonObject; virtual;
+    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aDict: TDictionary<String, String>; aNestedAttribute: string = '') : TJsonObject; virtual;
     procedure addMasterTableToJson(aDs: TDataSet; apStream: TStringStream); virtual;
     procedure RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod); virtual;
     function GetIdRemoto(aDoc: IXMLDomDocument2): integer;
@@ -654,7 +655,7 @@ begin
                end
                else
                  jsonArrayDetails := Self.FDetailList.Items[aTabelaDetalhe.nomeParametro];
-               jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, aTabelaDetalhe.nomeParametro));
+               jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, Self.DataSetToArray(aDataSet), aTabelaDetalhe.nomeParametro));
                for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
                  SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePK).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
             end);
@@ -695,29 +696,46 @@ begin
   end;
 end;
 
-function TDataIntegradorModuloWeb.getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aNestedAttribute: string = ''): TJsonObject;
+function TDataIntegradorModuloWeb.DataSetToArray(aDs: TDataSet) : TDictionary<String, String>;
+var
+  i: Integer;
+  nome: String;
+  value: String;
+  dic: TDictionary<String,String>;
+begin
+  dic := TDictionary<String,String>.Create;
+  for I := 0 to aDs.FieldCount - 1 do
+  begin
+    nome := aDs.Fields[i].FieldName;
+    if aDs.Fields[i].IsNull then
+      value := ''
+    else
+      value := aDs.Fields[i].Value;
+    dic.Add(nome, value)
+  end;
+  Result := dic;
+end;
+
+function TDataIntegradorModuloWeb.getJsonObject(aDs: TDataSet;
+ aTranslations: TTranslationSet; aDict: TDictionary<String, String>; aNestedAttribute: string = ''): TJsonObject;
 var
   i: integer;
-  nomeCampo, nome, valor: string;
+  nomeCampo, nome, valor, fieldValue: string;
 begin
   Result := TJsonObject.Create;
   for i := 0 to aTranslations.size-1 do
   begin
     nomeCampo := aTranslations.get(i).pdv;
-    if aDs.FindField(nomeCampo) <> nil then
+    if aDict.ContainsKey(UpperCase(nomeCampo)) then
     begin
       nome := aTranslations.get(i).server;
-      outputdebugstring(PwideChar(nome));
+      fieldValue := aDict.Items[UpperCase(aTranslations.get(i).pdv)];
+
       valor :=  translateValueToServer(aTranslations.get(i), aTranslations.get(i).pdv,
-          aDs.fieldByName(aTranslations.get(i).pdv), aNestedAttribute, aTranslations.get(i).fkName);
+          aDs.fieldByName(aTranslations.get(i).pdv), aNestedAttribute, aTranslations.get(i).fkName, fieldValue);
       if not JsonObjectHasPair(nome, Result) then
         if Self.encodeJsonValues then
-        begin
-          if aDs.fieldByName(aTranslations.get(i).pdv).DataType = ftString then
-            Result.AddPair(nome,  EncodeString(UTF8Encode(trim(valor))))
-          else
-            Result.AddPair(nome,  EncodeString(Trim(valor)));
-        end
+          Result.AddPair(nome,  EncodeString(Trim(valor)))
         else
           Result.AddPair(nome, valor);
     end;
@@ -729,7 +747,7 @@ var
   JMaster, JResponse: TJsonObject;
   Item: TPair<string, TJSONArrayContainer>;
 begin
-  JMaster := Self.getJsonObject(aDs, Self.translations);
+  JMaster := Self.getJsonObject(aDs, Self.translations, Self.DataSetToArray(aDs));
   JResponse := TJSONObject.Create;
   jResponse.AddPair(Self.nomeSingularSave, JMaster);
   for Item in Self.FDetailList do
@@ -761,7 +779,7 @@ begin
       params.Free;
     end;
   end;
-  if paramsType = ptJSON then
+ if paramsType = ptJSON then
   begin
     pStream := TStringStream.Create('', TEncoding.UTF8);
     try
@@ -807,7 +825,7 @@ begin
   end;
 end;
 
-
+                                                
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
   var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
 var
@@ -1184,13 +1202,13 @@ begin
 end;
 
 function TDataIntegradorModuloWeb.translateValueToServer(translation: TNameTranslation;
-  fieldName: string; field: TField; nestedAttribute: string = ''; fkName: string = ''): string;
+  fieldName: string; field: TField; nestedAttribute: string = ''; fkName: string = ''; fieldValue: String = ''): string;
 var
   lookupIdRemoto: integer;
   fk: string;
   StringStream: TStringStream;
 begin
-  result := field.asString;
+  Result := fieldValue;
   if translation.lookupRemoteTable <> '' then
   begin
     result := '';
@@ -1202,7 +1220,7 @@ begin
         fk := fkName;
       lookupIdRemoto := dmPrincipal.getSQLIntegerResult('SELECT idRemoto FROM ' +
         translation.lookupRemoteTable +
-        ' WHERE ' + fk + ' = cast(' + field.AsString + ' as blob)' );
+        ' WHERE ' + fk + ' = ' + fieldValue);
       if lookupIdRemoto > 0 then
         result := IntToStr(lookupIdRemoto)
     end;
@@ -1214,7 +1232,7 @@ begin
       try
         FormatSettings.DecimalSeparator := '.';
         FormatSettings.ThousandSeparator := #0;
-        result := field.AsString;
+        result := fieldValue;
       finally
         FormatSettings.DecimalSeparator := ',';
         FormatSettings.ThousandSeparator := '.';
@@ -1226,24 +1244,18 @@ begin
         result := 'NULL'
       else
         //result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', field.AsDateTime);
-        result := FormatDateTime(Self.getDateFormat , field.AsDateTime);
+        result := FormatDateTime(Self.getDateFormat , StrToDateTime(fieldValue));
     end
     else if field.DataType in [ftDate] then
     begin
       if field.IsNull then
         result := 'NULL'
       else
-        result := FormatDateTime('yyyy-mm-dd', field.AsDateTime);
+        result := FormatDateTime('yyyy-mm-dd', StrToDate(fieldValue));
     end
     else if field.DataType = ftBlob then
     begin
-      StringStream := TStringStream.Create;
-      try
-        TBlobField(field).SaveToStream(StringStream);
-        result := StringStream.DataString;
-      finally
-        StringStream.Free;
-      end;
+      result := fieldValue;
     end;
   end;
 end;
