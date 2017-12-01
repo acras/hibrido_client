@@ -190,6 +190,7 @@ type
     function getXMLContentAsXMLDom(const aXMLContent: string): IXMLDomDocument2;
     procedure SetdmPrincipal(const Value: IDataPrincipal); virtual;
     function getdmPrincipal: IDataPrincipal; virtual;
+    function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -679,7 +680,20 @@ begin
   end;
 end;
 
-
+function TDataIntegradorModuloWeb.JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
+var
+  jsonPair: TJSONPair;
+begin
+  Result := False;
+  for jsonPair in aJson do
+  begin
+    if JsonPair.JsonString.Value = aName then
+    begin
+      Result := True;
+      break;
+    end;
+  end;
+end;
 
 function TDataIntegradorModuloWeb.getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aNestedAttribute: string = ''): TJsonObject;
 var
@@ -693,12 +707,19 @@ begin
     if aDs.FindField(nomeCampo) <> nil then
     begin
       nome := aTranslations.get(i).server;
-      valor := translateValueToServer(aTranslations.get(i), aTranslations.get(i).pdv,
+      outputdebugstring(PwideChar(nome));
+      valor :=  translateValueToServer(aTranslations.get(i), aTranslations.get(i).pdv,
           aDs.fieldByName(aTranslations.get(i).pdv), aNestedAttribute, aTranslations.get(i).fkName);
-      if Self.encodeJsonValues then
-        Result.AddPair(nome,  EncodeString(UTF8Encode(valor)))
-      else
-        Result.AddPair(nome, valor);
+      if not JsonObjectHasPair(nome, Result) then
+        if Self.encodeJsonValues then
+        begin
+          if aDs.fieldByName(aTranslations.get(i).pdv).DataType = ftString then
+            Result.AddPair(nome,  EncodeString(UTF8Encode(trim(valor))))
+          else
+            Result.AddPair(nome,  EncodeString(Trim(valor)));
+        end
+        else
+          Result.AddPair(nome, valor);
     end;
   end;
 end;
@@ -713,7 +734,13 @@ begin
   jResponse.AddPair(Self.nomeSingularSave, JMaster);
   for Item in Self.FDetailList do
     JMaster.AddPair(item.Key, Item.Value.getJsonArray);
+  try
   apStream.WriteString(JResponse.ToString);
+  except
+    asm
+      nop
+    end;
+  end;
 end;
 
 function TDataIntegradorModuloWeb.post(ds: TDataSet; http: TidHTTP; url: string): string;
@@ -1163,8 +1190,10 @@ var
   fk: string;
   StringStream: TStringStream;
 begin
+  result := field.asString;
   if translation.lookupRemoteTable <> '' then
   begin
+    result := '';
     if (field.asInteger >= 0) and not(field.IsNull) then
     begin
       if fkName = '' then
@@ -1173,14 +1202,10 @@ begin
         fk := fkName;
       lookupIdRemoto := dmPrincipal.getSQLIntegerResult('SELECT idRemoto FROM ' +
         translation.lookupRemoteTable +
-        ' WHERE ' + fk + ' = ' + field.AsString);
+        ' WHERE ' + fk + ' = cast(' + field.AsString + ' as blob)' );
       if lookupIdRemoto > 0 then
         result := IntToStr(lookupIdRemoto)
-      else
-        result := '';
-    end
-    else
-      result := '';
+    end;
   end
   else
   begin
@@ -1219,9 +1244,7 @@ begin
       finally
         StringStream.Free;
       end;
-    end
-    else
-      result := field.asString;
+    end;
   end;
 end;
 
