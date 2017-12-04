@@ -9,9 +9,12 @@ uses
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
   Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, Data.DBXJSON, HTTPApp,
-  Soap.EncdDecd, Data.DBXJSONReflect;
+  Soap.EncdDecd;
 
 type
+  TDatasetDictionary = class(TDictionary<String, String>)
+  end;
+
   EIntegradorException = class(Exception)
   end;
 
@@ -106,8 +109,6 @@ type
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
-    function DataSetToArray(aDs: TDataSet): TDictionary<String, String>;
-
   protected
     FDetailList: TDictionary<String, TJSONArrayContainer>;
     FDataLog: ILog;
@@ -184,7 +185,7 @@ type
     function post(ds: TDataSet; http: TidHTTP; url: string): string; virtual;
     procedure addDetailsToJsonList(aDs: TDataSet); virtual;
     procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe); virtual;
-    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aDict: TDictionary<String, String>; aNestedAttribute: string = '') : TJsonObject; virtual;
+    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aDict: TDatasetDictionary; aNestedAttribute: string = '') : TJsonObject; virtual;
     procedure addMasterTableToJson(aDs: TDataSet; apStream: TStringStream); virtual;
     procedure RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod); virtual;
     function GetIdRemoto(aDoc: IXMLDomDocument2): integer;
@@ -192,6 +193,7 @@ type
     procedure SetdmPrincipal(const Value: IDataPrincipal); virtual;
     function getdmPrincipal: IDataPrincipal; virtual;
     function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
+    function DataSetToArray(aDs: TDataSet): TDatasetDictionary; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -643,6 +645,7 @@ begin
              procedure (aDataSet: TDataSet)
              var
                i: integer;
+               Dict: TDataSetDictionary;
              begin
                if not Self.FDetailList.ContainsKey(aTabelaDetalhe.nomeParametro) then
                begin
@@ -655,9 +658,14 @@ begin
                end
                else
                  jsonArrayDetails := Self.FDetailList.Items[aTabelaDetalhe.nomeParametro];
-               jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, Self.DataSetToArray(aDataSet), aTabelaDetalhe.nomeParametro));
-               for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
-                 SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePK).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
+               Dict := Self.DataSetToArray(aDataSet);
+               try
+                 jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, Dict, aTabelaDetalhe.nomeParametro));
+                 for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
+                   SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePK).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
+               finally
+                 Dict.Free;
+               end;
             end);
 end;
 
@@ -696,14 +704,13 @@ begin
   end;
 end;
 
-function TDataIntegradorModuloWeb.DataSetToArray(aDs: TDataSet) : TDictionary<String, String>;
+function TDataIntegradorModuloWeb.DataSetToArray(aDs: TDataSet) : TDatasetDictionary;
 var
   i: Integer;
   nome: String;
   value: String;
-  dic: TDictionary<String,String>;
 begin
-  dic := TDictionary<String,String>.Create;
+  Result := TDatasetDictionary.Create;
   for I := 0 to aDs.FieldCount - 1 do
   begin
     nome := aDs.Fields[i].FieldName;
@@ -711,13 +718,12 @@ begin
       value := ''
     else
       value := aDs.Fields[i].Value;
-    dic.Add(nome, value)
+    Result.Add(nome, value)
   end;
-  Result := dic;
 end;
 
 function TDataIntegradorModuloWeb.getJsonObject(aDs: TDataSet;
- aTranslations: TTranslationSet; aDict: TDictionary<String, String>; aNestedAttribute: string = ''): TJsonObject;
+ aTranslations: TTranslationSet; aDict: TDatasetDictionary; aNestedAttribute: string = ''): TJsonObject;
 var
   i: integer;
   nomeCampo, nome, valor, fieldValue: string;
@@ -746,18 +752,18 @@ procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDs: TDataSet; apStream:
 var
   JMaster, JResponse: TJsonObject;
   Item: TPair<string, TJSONArrayContainer>;
+  Dict: TDatasetDictionary;
 begin
-  JMaster := Self.getJsonObject(aDs, Self.translations, Self.DataSetToArray(aDs));
-  JResponse := TJSONObject.Create;
-  jResponse.AddPair(Self.nomeSingularSave, JMaster);
-  for Item in Self.FDetailList do
-    JMaster.AddPair(item.Key, Item.Value.getJsonArray);
+  Dict := Self.DataSetToArray(aDs);
   try
-  apStream.WriteString(JResponse.ToString);
-  except
-    asm
-      nop
-    end;
+    JMaster := Self.getJsonObject(aDs, Self.translations, Dict);
+    JResponse := TJSONObject.Create;
+    jResponse.AddPair(Self.nomeSingularSave, JMaster);
+    for Item in Self.FDetailList do
+      JMaster.AddPair(item.Key, Item.Value.getJsonArray);
+    apStream.WriteString(JResponse.ToString);
+  finally
+    Dict.Free;
   end;
 end;
 
