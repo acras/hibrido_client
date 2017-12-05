@@ -796,15 +796,30 @@ var
   i: Integer;
   nome: String;
   value: String;
+  fieldValue: string;
   BlobStream: TStringStream;
   FieldStream: TStream;
   bStream : TStream;
+  teste: TField;
 begin
   Result := TDatasetDictionary.Create;
   for I := 0 to aDs.FieldCount - 1 do
   begin
     nome := aDs.Fields[i].FieldName;
-    if (aDs.Fields[i].IsNull) or (aDs.Fields[i].AsString = '') then
+    OutputDebugString(PWideChar(nome));
+
+    try
+    begin
+      if VarIsNull(aDs.Fields[i].AsVariant) then
+        fieldValue := ''
+      else
+        fieldValue := aDs.Fields[i].AsVariant;
+    end;
+    except
+      fieldValue := aDs.Fields[i].AsString;
+    end;
+
+    if (aDs.Fields[i].IsNull) or (fieldValue = '') then
       value := ''
     else if aDs.Fields[i].DataType = ftBlob then
     begin
@@ -819,7 +834,7 @@ begin
       end;
     end
     else
-      value := aDs.Fields[i].AsString;
+      value := fieldValue;
     Result.Add(nome, value)
   end;
 end;
