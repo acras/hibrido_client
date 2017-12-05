@@ -800,7 +800,6 @@ var
   BlobStream: TStringStream;
   FieldStream: TStream;
   bStream : TStream;
-  teste: TField;
 begin
   Result := TDatasetDictionary.Create;
   for I := 0 to aDs.FieldCount - 1 do
