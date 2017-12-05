@@ -9,7 +9,7 @@ uses
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
   Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, Data.DBXJSON, HTTPApp,
-  Soap.EncdDecd;
+  Soap.EncdDecd, Variants;
 
 type
   TDatasetDictionary = class(TDictionary<String, String>)
@@ -109,6 +109,7 @@ type
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
+    function getFieldInsertList(node: IXMLDomNode): string;
   protected
     FDetailList: TDictionary<String, TJSONArrayContainer>;
     FDataLog: ILog;
@@ -134,8 +135,7 @@ type
     function ultimaVersao: integer; virtual;
     function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string; virtual;
     procedure importRecord(node: IXMLDomNode);
-    procedure insertRecord(const aInsertStatement: string);
-    procedure updateRecord(const aUpdateStatement: string; const id: integer);
+    procedure updateInsertRecord(node: IXMLDomNode; const id: integer);
     function jaExiste(id: integer): boolean;
     function getFieldList(node: IXMLDomNode): string;
     function getFieldUpdateList(node: IXMLDomNode): string;
@@ -295,6 +295,7 @@ procedure TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode);
 var
   id: integer;
   statement: string;
+  qry: TSQLDataSet;
 begin
   if not singleton then
   begin
@@ -303,18 +304,13 @@ begin
     begin
       dmPrincipal.startTransaction;
       try
-        if jaExiste(id) then
-        begin
-          statement := Self.GetUpdateStatement(node, id);
-          Self.updateRecord(statement, id);
-        end
-        else
-        begin
-          statement := Self.getInsertStatement(node);
-          insertRecord(statement);
+        try
+          qry := dmPrincipal.getQuery;
+          Self.updateInsertRecord(node, id);
+          dmPrincipal.commit;
+        finally
+          FreeAndNil(qry);
         end;
-
-        dmPrincipal.commit;
       except
         on E:Exception do
         begin
@@ -370,10 +366,90 @@ begin
   Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node);
 end;
 
-procedure TDataIntegradorModuloWeb.updateRecord(const aUpdateStatement: string; const id: integer);
+procedure TDataIntegradorModuloWeb.updateInsertRecord(node: IXMLDomNode; const id: integer);
+var
+  i: integer;
+  name: string;
+  qry, qryFields: TSQLDataSet;
+  FieldsListUpdate, FieldsListInsert : string;
+  Field: TField;
+  ValorCampo: string;
+  BlobStream: TStringStream;
+  Existe: Boolean;
 begin
-  beforeUpdateRecord(id);
-  dmPrincipal.execSQL(aUpdateStatement);
+  Existe := jaExiste(id);
+  qry := dmPrincipal.getQuery;
+  qryFields := dmPrincipal.getQuery;
+  try
+    qryFields.CommandText := 'select first 1 * from ' + nomeTabela + ' where 1=0';
+    qryFields.Open;
+
+    if Existe then
+    begin
+      FieldsListUpdate := self.getFieldUpdateList(node);
+      qry.CommandText := 'Update ' + nomeTabela + ' set ' + FieldsListUpdate
+    end
+    else
+    begin
+      FieldsListInsert := self.getFieldInsertList(node);
+      qry.CommandText := 'Insert into ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
+    end;
+
+    if DuasVias then
+      qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
+    else
+      qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
+
+    //Preenche os Parametros
+    for i := 0 to node.childNodes.length - 1 do
+    begin
+      name := translateFieldNameServerToPdv(node.childNodes.item[i]);
+      ValorCampo := translateFieldValue(node.childNodes.item[i]);
+      if name <> '*' then
+        if Self.getIncludeFieldNameOnList(dmUpdate, name) then
+        begin
+          if ValorCampo = 'NULL' then
+          begin
+            qry.ParamByName(name).Value := unassigned;
+            qry.ParamByName(name).DataType := ftString;
+          end
+          else
+          begin
+            Field := qryFields.FieldByName(name);
+            if Field.DataType = ftString then
+              qry.ParamByName(name).AsString := ValorCampo
+            else if Field.DataType = ftInteger then
+              qry.ParamByName(name).AsInteger := StrToInt(ValorCampo)
+            else if Field.DataType = ftLargeint then
+              qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo)
+            else if Field.DataType = ftCurrency then
+              qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo)
+            else if Field.DataType = ftFloat then
+              qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo)
+            else if Field.DataType = ftBlob then
+            begin
+              BlobStream := TStringStream.Create(ValorCampo);
+              try
+                qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
+              finally
+                FreeAndNil(BlobStream);
+              end;
+            end
+            else
+            begin
+              qry.ParamByName(name).AsString := ValorCampo;
+            end;
+          end;
+        end;
+    end;
+
+    if Existe then
+      beforeUpdateRecord(id);
+    qry.ExecSQL;
+  finally
+    FreeAndNil(qry);
+    FreeAndNil(qryFields);
+  end;
 end;
 
 procedure TDataIntegradorModuloWeb.UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
@@ -435,11 +511,6 @@ begin
   result := 'UPDATE ' + nomeTabela + getFieldUpdateList(node);
 end;
 
-procedure TDataIntegradorModuloWeb.insertRecord(const aInsertStatement: string);
-begin
-  dmPrincipal.execSQL(aInsertStatement);
-end;
-
 function TDataIntegradorModuloWeb.getFieldList(node: IXMLDomNode): string;
 var
   i: integer;
@@ -494,17 +565,33 @@ var
   i: integer;
   name: string;
 begin
-  result := ' set ';
+  result := '';
   for i := 0 to node.childNodes.length - 1 do
   begin
     name := translateFieldNameServerToPdv(node.childNodes.item[i]);
     if name <> '*' then
       if Self.getIncludeFieldNameOnList(dmUpdate, name) then
-        result := result + ' ' + translateFieldNameServerToPdv(node.childNodes.item[i]) + ' = ' +
-          translateFieldValue(node.childNodes.item[i]) + ', ';
+        result := result + ' ' + name + ' = :' + name + ',';
   end;
-  result := copy(result, 0, length(result)-2);
+  //Remove a ultima virgula
+  result := copy(result, 1, Length(result)-1);
   result := result + getFieldAdditionalUpdateList(node);
+end;
+
+function TDataIntegradorModuloWeb.getFieldInsertList(node: IXMLDomNode): string;
+var
+  i: integer;
+  name: string;
+begin
+  Result := '';
+  for i := 0 to node.childNodes.length - 1 do
+  begin
+    name := translateFieldNameServerToPdv(node.childNodes.item[i]);
+    if name <> '*' then
+      if Self.getIncludeFieldNameOnList(dmInsert, name) then
+        Result := Result + ' :' + name + ',';
+  end;
+  Result := copy(Result, 1, Length(Result)-1);
 end;
 
 function TDataIntegradorModuloWeb.getIncludeFieldNameOnList(const aDMLOperation: TDMLOperation; const aFieldName: string): boolean;
@@ -560,7 +647,7 @@ end;
 function TDataIntegradorModuloWeb.translateTypeValue(fieldType, fieldValue: string): string;
 begin
   result := QuotedStr(fieldValue);
-  if fieldType = 'integer' then
+  if (fieldType = 'integer') or (fieldType = 'float') then
     result := fieldValue
   else if fieldType = 'boolean' then
   begin
@@ -709,6 +796,9 @@ var
   i: Integer;
   nome: String;
   value: String;
+  BlobStream: TStringStream;
+  FieldStream: TStream;
+  bStream : TStream;
 begin
   Result := TDatasetDictionary.Create;
   for I := 0 to aDs.FieldCount - 1 do
@@ -716,8 +806,20 @@ begin
     nome := aDs.Fields[i].FieldName;
     if (aDs.Fields[i].IsNull) or (aDs.Fields[i].AsString = '') then
       value := ''
+    else if aDs.Fields[i].DataType = ftBlob then
+    begin
+      try
+        BlobStream := TStringStream.Create;
+        FieldStream := aDs.CreateBlobStream(aDs.Fields[i], bmRead);
+        BlobStream.LoadFromStream(FieldStream);
+        value := BlobStream.DataString;
+      Finally
+        FreeAndNil(BlobStream);
+        FreeAndNil(FieldStream);
+      end;
+    end
     else
-      value := aDs.Fields[i].Value;
+      value := aDs.Fields[i].AsString;
     Result.Add(nome, value)
   end;
 end;
@@ -1213,8 +1315,13 @@ var
   lookupIdRemoto: integer;
   fk: string;
   StringStream: TStringStream;
+  ValorCampo: string;
 begin
-  Result := fieldValue;
+  if fieldValue <> '' then
+    ValorCampo := fieldValue
+  else
+    ValorCampo := field.AsString;
+  Result := ValorCampo;
   if translation.lookupRemoteTable <> '' then
   begin
     result := '';
@@ -1226,7 +1333,7 @@ begin
         fk := fkName;
       lookupIdRemoto := dmPrincipal.getSQLIntegerResult('SELECT idRemoto FROM ' +
         translation.lookupRemoteTable +
-        ' WHERE ' + fk + ' = ' + fieldValue);
+        ' WHERE ' + fk + ' = ' + ValorCampo);
       if lookupIdRemoto > 0 then
         result := IntToStr(lookupIdRemoto)
     end;
@@ -1235,14 +1342,7 @@ begin
   begin
     if field.DataType in [ftFloat, ftBCD, ftFMTBCD, ftCurrency] then
     begin
-      try
-        FormatSettings.DecimalSeparator := '.';
-        FormatSettings.ThousandSeparator := #0;
-        result := fieldValue;
-      finally
-        FormatSettings.DecimalSeparator := ',';
-        FormatSettings.ThousandSeparator := '.';
-      end;
+      result := StringReplace(ValorCampo, ',','.', [rfReplaceAll]);
     end
     else if field.DataType in [ftDateTime, ftTimeStamp] then
     begin
@@ -1250,18 +1350,18 @@ begin
         result := 'NULL'
       else
         //result := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', field.AsDateTime);
-        result := FormatDateTime(Self.getDateFormat , StrToDateTime(fieldValue));
+        result := FormatDateTime(Self.getDateFormat , StrToDateTime(ValorCampo));
     end
     else if field.DataType in [ftDate] then
     begin
       if field.IsNull then
         result := 'NULL'
       else
-        result := FormatDateTime('yyyy-mm-dd', StrToDate(fieldValue));
+        result := FormatDateTime('yyyy-mm-dd', StrToDate(ValorCampo));
     end
     else if field.DataType = ftBlob then
     begin
-      result := fieldValue;
+      result := ValorCampo;
     end;
   end;
 end;
