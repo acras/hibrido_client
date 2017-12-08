@@ -74,6 +74,7 @@ type
       function translatePDVToServer(pdvName: string): string;
       function size: integer;
       function get(index: integer): TNameTranslation;
+      procedure clear;
   end;
 
   TTabelaDependente = class
@@ -310,6 +311,7 @@ begin
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
     if notifier <> nil then
       notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
+    log('Iniciando busca classe: ' + self.ClassName, 'Sync');
     numRegistros := 0;
     {$IFDEF HibridoClientDLL}
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_BLUE OR 4 OR FOREGROUND_INTENSITY ); //);
@@ -1623,6 +1625,11 @@ end;
 procedure TDataIntegradorModuloWeb.beforeRedirectRecord(idAntigo, idNovo: integer);
 begin
   //
+end;
+
+procedure TTranslationSet.clear;
+begin
+  SetLength(translations, 0);
 end;
 
 constructor TTranslationSet.create(owner: TComponent);
