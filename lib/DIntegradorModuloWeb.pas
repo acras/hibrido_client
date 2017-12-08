@@ -15,6 +15,26 @@ type
   TDatasetDictionary = class(TDictionary<String, String>)
   end;
 
+  TFieldDictionary = class
+  private
+   FFieldName: string;
+   FfieldType: TFieldType;
+    procedure SetFieldName(const Value: string);
+  public
+    property FieldName: string read FFieldName write SetFieldName;
+    property DataType: TFieldType read FFieldType write FFieldType;
+  end;
+
+  TFieldDictionaryList = class(TDictionary <string, TFieldDictionary>)
+  private
+    FDm : IDataPrincipal;
+    FTableName: string;
+    procedure getTableFields;
+  public
+    constructor Create(const aTableName: string; aDm : IDataPrincipal);
+    destructor Destroy; override;
+  end;
+
   EIntegradorException = class(Exception)
   end;
 
@@ -68,6 +88,8 @@ type
     FnomeParametro: string;
     FnomeSingularDetalhe: string;
     FnomePluralDetalhe: string;
+    FFieldList : TFieldDictionaryList;
+    FDm : IDataPrincipal;
   protected
     function GetNomeTabela: string; virtual;
     procedure setNomeTabela(const Value: string); virtual;
@@ -81,6 +103,7 @@ type
     function GetNomeSingularDetalhe: string; virtual;
     procedure setNomePluralDetalhe(const Value: string); virtual;
     procedure setNomeSingularDetalhe(const Value: string); virtual;
+    procedure setDmPrincipal(const Value: IDataPrincipal); virtual;
   public
     tabelasDetalhe: array of TTabelaDetalhe;
     translations: TTranslationSet;
@@ -91,6 +114,8 @@ type
     property nomeParametro: string read GetNomeParametro write setNomeParametro;
     property nomeSingularDetalhe: string read GetNomeSingularDetalhe write setNomeSingularDetalhe;
     property nomePluralDetalhe: string read GetNomePluralDetalhe write setNomePluralDetalhe;
+    property DmPrincipal: IDataPrincipal read FDm write setDmPrincipal;
+    destructor Destroy; override;
   end;
 
   TDataIntegradorModuloWeb = class(TDataModule)
@@ -112,6 +137,7 @@ type
     function getFieldInsertList(node: IXMLDomNode): string;
   protected
     FDetailList: TDictionary<String, TJSONArrayContainer>;
+    FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
     nomeTabela: string;
     nomeSingular: string;
@@ -370,20 +396,16 @@ procedure TDataIntegradorModuloWeb.updateInsertRecord(node: IXMLDomNode; const i
 var
   i: integer;
   name: string;
-  qry, qryFields: TSQLDataSet;
+  qry: TSQLDataSet;
   FieldsListUpdate, FieldsListInsert : string;
-  Field: TField;
   ValorCampo: string;
   BlobStream: TStringStream;
   Existe: Boolean;
+  Field: TFieldDictionary;
 begin
   Existe := jaExiste(id);
   qry := dmPrincipal.getQuery;
-  qryFields := dmPrincipal.getQuery;
   try
-    qryFields.CommandText := 'select first 1 * from ' + nomeTabela + ' where 1=0';
-    qryFields.Open;
-
     if Existe then
     begin
       FieldsListUpdate := self.getFieldUpdateList(node);
@@ -415,29 +437,34 @@ begin
           end
           else
           begin
-            Field := qryFields.FieldByName(name);
-            if Field.DataType = ftString then
-              qry.ParamByName(name).AsString := ValorCampo
-            else if Field.DataType = ftInteger then
-              qry.ParamByName(name).AsInteger := StrToInt(ValorCampo)
-            else if Field.DataType = ftLargeint then
-              qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo)
-            else if Field.DataType = ftCurrency then
-              qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo)
-            else if Field.DataType = ftFloat then
-              qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo)
-            else if Field.DataType = ftBlob then
+            Field := nil;
+            if Self.FFieldList <> nil then
+              Field := Self.FFieldList.Items[Lowercase(name)];
+            if Field <> nil then
             begin
-              BlobStream := TStringStream.Create(ValorCampo);
-              try
-                qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
-              finally
-                FreeAndNil(BlobStream);
+              if Field.DataType = ftString then
+                qry.ParamByName(name).AsString := ValorCampo
+              else if Field.DataType = ftInteger then
+                qry.ParamByName(name).AsInteger := StrToInt(ValorCampo)
+              else if Field.DataType = ftLargeint then
+                qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo)
+              else if Field.DataType = ftCurrency then
+                qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo)
+              else if Field.DataType = ftFloat then
+                qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo)
+              else if Field.DataType = ftBlob then
+              begin
+                BlobStream := TStringStream.Create(ValorCampo);
+                try
+                  qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
+                finally
+                  FreeAndNil(BlobStream);
+                end;
+              end
+              else
+              begin
+                qry.ParamByName(name).AsString := ValorCampo;
               end;
-            end
-            else
-            begin
-              qry.ParamByName(name).AsString := ValorCampo;
             end;
           end;
         end;
@@ -448,7 +475,6 @@ begin
     qry.ExecSQL;
   finally
     FreeAndNil(qry);
-    FreeAndNil(qryFields);
   end;
 end;
 
@@ -799,7 +825,6 @@ var
   fieldValue: string;
   BlobStream: TStringStream;
   FieldStream: TStream;
-  bStream : TStream;
 begin
   Result := TDatasetDictionary.Create;
   for I := 0 to aDs.FieldCount - 1 do
@@ -1320,6 +1345,8 @@ begin
   for Item in Self.FDetailList do
     Item.Value.Free;
   Self.FDetailList.Free;
+  if Self.FFieldList <> nil then
+    Self.FFieldList.Free;
   inherited;
 end;
 
@@ -1328,7 +1355,6 @@ function TDataIntegradorModuloWeb.translateValueToServer(translation: TNameTrans
 var
   lookupIdRemoto: integer;
   fk: string;
-  StringStream: TStringStream;
   ValorCampo: string;
 begin
   if fieldValue <> '' then
@@ -1447,8 +1473,17 @@ end;
 
 procedure TDataIntegradorModuloWeb.SetdmPrincipal(
   const Value: IDataPrincipal);
+var
+  i: Integer;
 begin
   FdmPrincipal := Value;
+  if Value <> nil then
+  begin
+    if Self.FFieldList = nil then
+      Self.FFieldList := TFieldDictionaryList.Create(Self.nomeTabela, Value);
+    for i := 0 to High(Self.tabelasDetalhe) do
+      TTabelaDetalhe(Self.tabelasDetalhe[i]).DmPrincipal := Value;
+  end;
 end;
 
 procedure TDataIntegradorModuloWeb.SetthreadControl(const Value: IThreadControl);
@@ -1488,6 +1523,12 @@ begin
   translations := TTranslationSet.create(nil);
 end;
 
+destructor TTabelaDetalhe.Destroy;
+begin
+  Self.FFieldList.Free;
+  inherited;
+end;
+
 function TTabelaDetalhe.GetNomeFK: string;
 begin
   Result := FnomeFK;
@@ -1516,6 +1557,13 @@ end;
 function TTabelaDetalhe.GetNomeTabela: string;
 begin
   Result := FNomeTabela;
+end;
+
+procedure TTabelaDetalhe.setDmPrincipal(const Value: IDataPrincipal);
+begin
+  Self.FDm := Value;
+  if self.FFieldList = nil then
+    Self.FFieldList := TFieldDictionaryList.Create(Self.GetNomeTabela, Value);
 end;
 
 procedure TTabelaDetalhe.setNomeFK(const Value: string);
@@ -1556,5 +1604,110 @@ begin
     Self.FJSonArray := TJSONArray.Create;
   Result := Self.FJSonArray;
 end;
+
+{ TFieldList }
+
+constructor TFieldDictionaryList.Create(const aTableName: string; aDm : IDataPrincipal);
+begin
+  inherited Create;
+  FTableName := UpperCase(aTableName);
+  FDm := aDm;
+  Self.getTableFields;
+end;
+
+destructor TFieldDictionaryList.Destroy;
+var
+  _item: TPair<string, TFieldDictionary>;
+begin
+  for _item in Self do
+    _item.Value.Free;
+  inherited;
+end;
+
+procedure TFieldDictionaryList.getTableFields;
+var
+  _qry: TSQLDataSet;
+  _field: TFieldDictionary;
+  _FieldType: TFieldType;
+begin
+  if (FDm <> nil) and (self.FTableName <> EmptyStr) then
+  begin
+    _qry := FDm.getQuery;
+    try
+      Self.FTableName := UpperCase(Self.FTableName);
+      _qry.CommandText :=
+        '  SELECT ' +
+        '    A.RDB$FIELD_NAME FieldName,' +
+        '    C.RDB$TYPE AS DataType,' +
+        '    C.RDB$TYPE_NAME TIPO,' +
+        '    B.RDB$FIELD_SUB_TYPE SUBTIPO,' +
+        '    B.RDB$FIELD_LENGTH TAMANHO,' +
+        '    B.RDB$SEGMENT_LENGTH SEGMENTO,' +
+        '    B.RDB$FIELD_PRECISION PRECISAO,' +
+        '    B.RDB$FIELD_SCALE CASAS_DECIMAIS,' +
+        '    A.RDB$DEFAULT_SOURCE VALOR_PADRAO,' +
+        '    A.RDB$NULL_FLAG OBRIGATORIO' +
+        '  FROM' +
+        '    RDB$RELATION_FIELDS A,' +
+        '    RDB$FIELDS B,' +
+        '    RDB$TYPES C' +
+        '  WHERE' +
+        '    (A.RDB$RELATION_NAME = '+ QuotedStr(Self.FTableName) + ') AND' +
+        '    (B.RDB$FIELD_NAME = A.RDB$FIELD_SOURCE)AND' +
+        '    (C.RDB$TYPE = B.RDB$FIELD_TYPE) AND' +
+        '    (C.RDB$FIELD_NAME = ''RDB$FIELD_TYPE'')' +
+        '  ORDER BY' +
+        '    RDB$FIELD_POSITION';
+
+      _qry.Open;
+      _qry.First;
+      while not _qry.Eof do
+      begin
+        if not self.ContainsKey(Lowercase(_qry.FieldByName('FieldName').AsString)) then
+        begin
+          _field := TFieldDictionary.Create;
+          _field.FieldName := Lowercase(_qry.FieldByName('FieldName').AsString);
+          case _qry.FieldByName('DataType').AsInteger of
+            7: //Short
+              _FieldType := ftSmallInt;
+            8: //INTEGER
+              _FieldType := ftInteger;
+            10: //Float
+              _FieldType := ftFloat;
+            12: //Date
+              _FieldType := ftDate;
+            13: //Time
+              _FieldType := ftTime;
+            16: //int64
+              _FieldType := ftLargeint;
+            27: //double
+              _FieldType := ftCurrency;
+            35: //timestamp
+              _FieldType := ftTimeStamp;
+            14, 37: //varchar
+              _FieldType := ftString;
+            261: //blob
+              _FieldType := ftBlob
+            else
+              _FieldType := ftUnknown;
+          end;
+          _field.DataType := _FieldType;
+          Self.Add(LowerCase(Trim(_qry.FieldByName('FieldName').asString)), _field);
+        end;
+        _qry.Next;
+      end;
+    finally
+      _qry.Free;
+    end;
+  end;
+end;
+
+{ TFieldDictionary }
+
+procedure TFieldDictionary.SetFieldName(const Value: string);
+begin
+  FFieldName := Trim(Value);
+end;
+
 
 end.
