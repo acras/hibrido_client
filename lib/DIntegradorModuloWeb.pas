@@ -36,6 +36,7 @@ type
       function translatePDVToServer(pdvName: string): string;
       function size: integer;
       function get(index: integer): TNameTranslation;
+      procedure clear;
   end;
 
   TTabelaDependente = record
@@ -205,6 +206,7 @@ begin
     url := getRequestUrlForAction(false, ultimaVersao) + extraGetUrlParams;
     if notifier <> nil then
       notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
+    log('Iniciando busca classe: ' + self.ClassName, 'Sync');
     numRegistros := 0;
     xmlContent := getRemoteXmlContent(url, http);
 
@@ -932,6 +934,11 @@ end;
 procedure TDataIntegradorModuloWeb.beforeRedirectRecord(idAntigo, idNovo: integer);
 begin
   //
+end;
+
+procedure TTranslationSet.clear;
+begin
+  SetLength(translations, 0);
 end;
 
 constructor TTranslationSet.create(owner: TComponent);
