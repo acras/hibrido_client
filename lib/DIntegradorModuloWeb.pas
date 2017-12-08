@@ -9,7 +9,7 @@ uses
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
   Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, HTTPApp,
-  Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON {$ENDIF} {$IFDEF VER300} System.JSON {$ENDIF};
+  Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON {$ENDIF} {$IFDEF VER300}, System.JSON {$ENDIF};
 
 type
   TDatasetDictionary = class(TDictionary<String, String>)
