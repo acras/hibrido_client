@@ -409,18 +409,17 @@ begin
     if Existe then
     begin
       FieldsListUpdate := self.getFieldUpdateList(node);
-      qry.CommandText := 'Update ' + nomeTabela + ' set ' + FieldsListUpdate
+      qry.CommandText := 'UPDATE ' + nomeTabela + ' SET ' + FieldsListUpdate;
+      if DuasVias then
+        qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
+      else
+        qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
     end
     else
     begin
       FieldsListInsert := self.getFieldInsertList(node);
-      qry.CommandText := 'Insert into ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
+      qry.CommandText := 'INSERT INTO ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
     end;
-
-    if DuasVias then
-      qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
-    else
-      qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
 
     //Preenche os Parametros
     for i := 0 to node.childNodes.length - 1 do
