@@ -262,7 +262,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.getDadosAtualizados(http: TIdHTTP = nil);
 var
-  url, xmlContent, erro: string;
+  url, xmlContent, erro, log: string;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   i, numRegistros: integer;
@@ -281,8 +281,15 @@ begin
     numRegistros := 0;
 
     xmlContent := getRemoteXmlContent(url, http, erro);
-    if Self.DataLog <> nil then
-      Self.DataLog.log(Format('Erro importando "%s": "%s". '+ #13#10, [getHumanReadableName, erro]));
+    if (Self.DataLog <> nil) then
+    begin
+      if (erro <> EmptyStr) then
+      begin
+        log := Format('Erro importando "%s": "%s". '+ #13#10, [getHumanReadableName, GetErrorMessage(erro)]);
+        Self.DataLog.log(log);
+        raise EIntegradorException.Create(log);
+      end;
+    end;
 
     if trim(xmlContent) <> '' then
     begin
