@@ -262,7 +262,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.getDadosAtualizados(http: TIdHTTP = nil);
 var
-  url, xmlContent: string;
+  url, xmlContent, erro: string;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   i, numRegistros: integer;
@@ -279,7 +279,10 @@ begin
     if notifier <> nil then
       notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
     numRegistros := 0;
-    xmlContent := getRemoteXmlContent(url, http);
+
+    xmlContent := getRemoteXmlContent(url, http, erro);
+    if Self.DataLog <> nil then
+      Self.DataLog.log(Format('Erro importando "%s": "%s". '+ #13#10, [getHumanReadableName, erro]));
 
     if trim(xmlContent) <> '' then
     begin
@@ -1110,7 +1113,7 @@ begin
         begin
           node := list.FindNode('error');
           if node <> nil then
-            Result := Utf8Decode(HTTPDecode(node.Text));
+            Result := UTF8ToString(HTTPDecode(node.Text));
         end;
       end;
     finally
