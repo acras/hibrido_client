@@ -207,7 +207,7 @@ type
     function getObjectsList: string; virtual;
     function getUpdateStatement(node: IXMLDomNode; const id: integer): String; virtual;
     function getInsertStatement(node: IXMLDomNode): String; virtual;
-    function getNewId: Integer; virtual; abstract;
+    function getNewId: Integer; virtual;
     function post(ds: TDataSet; http: TidHTTP; url: string): string; virtual;
     procedure addDetailsToJsonList(aDs: TDataSet); virtual;
     procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe); virtual;
@@ -405,6 +405,7 @@ var
   BlobStream: TStringStream;
   Existe: Boolean;
   Field: TFieldDictionary;
+  NewId: integer;
 begin
   Existe := jaExiste(id);
   qry := dmPrincipal.getQuery;
@@ -421,7 +422,12 @@ begin
     else
     begin
       FieldsListInsert := self.getFieldInsertList(node);
+      NewId := Self.getNewId;
+      if NewId > 0 then
+         FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
       qry.CommandText := 'INSERT INTO ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
+      if qry.Params.ParamByName(Self.nomePkLocal) <> nil then
+        qry.ParamByName(Self.nomePkLocal).AsInteger := NewId;
     end;
 
     //Preenche os Parametros
@@ -669,7 +675,7 @@ begin
     result := translateValueFromServer(node.nodeName, typedTranslate);
   end
   else
-    result := QuotedStr(translateValueFromServer(node.nodeName, node.text));
+    result := translateValueFromServer(node.nodeName, node.text);
 end;
 
 function TDataIntegradorModuloWeb.translateTypeValue(fieldType, fieldValue: string): string;
@@ -889,6 +895,11 @@ begin
           Result.AddPair(nome, valor);
     end;
   end;
+end;
+
+function TDataIntegradorModuloWeb.getNewId: Integer;
+begin
+  Result := 0;
 end;
 
 procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
