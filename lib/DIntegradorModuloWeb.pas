@@ -262,12 +262,13 @@ end;
 
 procedure TDataIntegradorModuloWeb.getDadosAtualizados(http: TIdHTTP = nil);
 var
-  url, xmlContent, erro, log: string;
+  url, xmlContent, erro: string;
   doc: IXMLDomDocument2;
   list : IXMLDomNodeList;
   i, numRegistros: integer;
   node : IXMLDomNode;
   keepImporting: boolean;
+  vLog: string;
 begin
   keepImporting := true;
   while keepImporting do
@@ -281,14 +282,12 @@ begin
     numRegistros := 0;
 
     xmlContent := getRemoteXmlContent(url, http, erro);
-    if (Self.DataLog <> nil) then
+
+    if (erro <> EmptyStr) then
     begin
-      if (erro <> EmptyStr) then
-      begin
-        log := Format('Erro importando "%s": "%s". '+ #13#10, [getHumanReadableName, GetErrorMessage(erro)]);
-        Self.DataLog.log(log);
-        raise EIntegradorException.Create(log);
-      end;
+      vLog := Format('Erro importando "%s": "%s". '+ #13#10, [getHumanReadableName, GetErrorMessage(erro)]);
+      Self.Log(vLog);
+      raise EIntegradorException.Create(vLog);
     end;
 
     if trim(xmlContent) <> '' then
@@ -413,6 +412,7 @@ var
   Existe: Boolean;
   Field: TFieldDictionary;
   NewId: integer;
+  Paramlog, vLog: string;
 begin
   Existe := jaExiste(id);
   qry := dmPrincipal.getQuery;
@@ -487,7 +487,19 @@ begin
 
     if Existe then
       beforeUpdateRecord(id);
-    qry.ExecSQL;
+    try
+      qry.ExecSQL;
+    except
+      on E:Exception do
+      begin
+        ParamLog := EmptyStr;
+        for i := 0 to qry.Params.Count - 1 do
+          ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
+        vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
+        Self.log(vLog);
+        Raise EIntegradorException.Create(vLog);
+      end;
+    end;
   finally
     FreeAndNil(qry);
   end;
@@ -804,13 +816,21 @@ var
 begin
   qry := dmPrincipal.getQuery;
   try
-    qry.commandText := 'SELECT * FROM ' + aTabelaDetalhe.nomeTabela + ' where ' + aTabelaDetalhe.nomeFK +
-      ' = ' + IntToStr(aValorPK) + self.getAdditionalDetailFilter;
-    qry.Open;
-    while not qry.Eof do
-    begin
-      aProc(qry);
-      qry.Next;
+    try
+      qry.commandText := 'SELECT * FROM ' + aTabelaDetalhe.nomeTabela + ' where ' + aTabelaDetalhe.nomeFK +
+        ' = ' + IntToStr(aValorPK) + self.getAdditionalDetailFilter;
+      qry.Open;
+      while not qry.Eof do
+      begin
+        aProc(qry);
+        qry.Next;
+      end;
+    except
+       on E: Exception do
+       begin
+         Self.FDataLog.log('Erro no SQL:' + #13#10 + qry.CommandText);
+         raise;
+       end;
     end;
   finally
     FreeAndNil(qry);
