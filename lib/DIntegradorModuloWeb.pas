@@ -281,6 +281,9 @@ begin
       notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
     numRegistros := 0;
 
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_BLUE OR 4 ); //);
+    writeln('URL: ' + url);
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
     xmlContent := getRemoteXmlContent(url, http, erro);
 
     if (erro <> EmptyStr) then
@@ -496,7 +499,9 @@ begin
         for i := 0 to qry.Params.Count - 1 do
           ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
         vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
         Self.log(vLog);
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
         Raise EIntegradorException.Create(vLog);
       end;
     end;
@@ -1221,6 +1226,9 @@ begin
       Self.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
       qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
         + getAdditionalSaveConditions;
+      SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14 OR 4); //FOREGROUND_RED);
+      writeln(qry.CommandText);
+      SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
       qry.Open;
       total := qry.RecordCount;
       n := 1;
@@ -1259,7 +1267,8 @@ begin
       end;
       if notifier <> nil then
         notifier.unflagSalvandoDadosServidor;
-      Self.log('Commitando post de records para remote. Classe: ' + ClassName, 'Sync')
+      if Total > 0 then
+        Self.log(Format('Post de records para remote comitados. Classe: %s. Total de registros: %d.', [ClassName, total]), 'Sync')
     except
       Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
       if stopOnPostRecordError then
