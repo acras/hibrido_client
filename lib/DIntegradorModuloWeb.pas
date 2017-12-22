@@ -1076,7 +1076,7 @@ begin
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
           end;
 
-          txtUpdate := txtUpdate + ' WHERE salvouRetaguarda = ''N'' and ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
+          txtUpdate := txtUpdate + ' WHERE ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
 
           //da a chance da classe gerenciar redirecionamentos, por exemplo ao descobrir que este registro já
           //existia no remoto e era outro registro neste banco de dados.
