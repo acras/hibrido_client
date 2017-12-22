@@ -8,8 +8,8 @@ uses
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
-  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, HTTPApp,
-  Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON {$ENDIF} {$IFDEF VER300}, System.JSON {$ENDIF};
+  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, HTTPApp, StrUtils,
+  Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON, Data.DBXPlatform {$ENDIF} {$IFDEF VER300}, System.JSON {$ENDIF};
 
 type
   TDatasetDictionary = class(TDictionary<String, String>)
@@ -460,27 +460,21 @@ begin
               Field := Self.FFieldList.Items[Lowercase(name)];
             if Field <> nil then
             begin
-              if Field.DataType = ftString then
-                qry.ParamByName(name).AsString := ValorCampo
-              else if Field.DataType = ftInteger then
-                qry.ParamByName(name).AsInteger := StrToInt(ValorCampo)
-              else if Field.DataType = ftLargeint then
-                qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo)
-              else if Field.DataType = ftCurrency then
-                qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo)
-              else if Field.DataType = ftFloat then
-                qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo)
-              else if Field.DataType = ftBlob then
-              begin
-                BlobStream := TStringStream.Create(ValorCampo);
-                try
-                  qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
-                finally
-                  FreeAndNil(BlobStream);
-                end;
-              end
+              case Field.DataType of
+                ftString: qry.ParamByName(name).AsString := ValorCampo;
+                ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
+                ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+                ftCurrency: qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
+                ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
+                ftBlob: begin
+                          BlobStream := TStringStream.Create(ValorCampo);
+                          try
+                            qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
+                          finally
+                            FreeAndNil(BlobStream);
+                          end;
+                end
               else
-              begin
                 qry.ParamByName(name).AsString := ValorCampo;
               end;
             end;
