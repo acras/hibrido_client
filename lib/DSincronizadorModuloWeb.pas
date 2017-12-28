@@ -129,6 +129,7 @@ var
   dm: IDataPrincipal;
   http: TidHTTP;
   dimw: TDataIntegradorModuloWeb;
+  dimwName: string;
 begin
   CoInitializeEx(nil, 0);
   try
@@ -141,15 +142,16 @@ begin
           Break;
 
         block := getterBlocks[i];
-        dm.startTransaction;
-        try
-          for j := 0 to length(block) - 1 do
-          begin
+        for j := 0 to length(block) - 1 do
+        begin
+          dm.startTransaction;
+          try
             if not Self.ShouldContinue then
               Break;
 
             dimw := block[j].Create(nil);
             try
+              dimwName := dimw.getHumanReadableName;
               dimw.notifier := Self.Fnotifier;
               dimw.dmPrincipal := dm;
               dimw.threadcontrol := Self.FThreadControl;
@@ -160,10 +162,19 @@ begin
             finally
               dimw.free;
             end;
+            dm.commit;
+          except
+            on E: Exception do
+            begin
+              dm.rollback;
+              if assigned (self.FDataLog) then
+              begin
+                SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
+                Self.FDataLog.log(Format('Erro em GetUpdateData para a classe "%s":'+#13#10+'%s', [dimwName,e.Message]));
+                SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+              end;
+            end;
           end;
-          dm.commit;
-        except
-          dm.rollback;
         end;
       end;
     finally
