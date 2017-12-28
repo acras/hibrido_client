@@ -332,7 +332,6 @@ end;
 procedure TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode);
 var
   id: integer;
-  statement: string;
   qry: TSQLDataSet;
 begin
   if not singleton then
@@ -353,8 +352,10 @@ begin
         on E:Exception do
         begin
           dmPrincipal.rollBack;
-          if Self.DataLog <> nil then
-            Self.DataLog.log(Format('Erro ao importar a tabela "%s": "%s". '+ #13#10 + 'Comando: "%s"', [self.nomeTabela, e.Message, statement]));
+          Self.log(Format('Erro ao importar a tabela "%s":', [self.nomeTabela]));
+          SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
+          Self.log(e.Message);
+          SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
         end;
       end;
     end;
@@ -416,6 +417,7 @@ var
   Field: TFieldDictionary;
   NewId: integer;
   Paramlog, vLog: string;
+  lFormatSettings: TFormatSettings;
 begin
   Existe := jaExiste(id);
   qry := dmPrincipal.getQuery;
@@ -434,7 +436,10 @@ begin
       FieldsListInsert := self.getFieldInsertList(node);
       NewId := Self.getNewId;
       if NewId > 0 then
-         FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
+      begin
+        if Pos(':'+Self.nomePKLocal +',', FieldsListInsert) = 0 then
+          FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
+      end;
       qry.CommandText := 'INSERT INTO ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
       if qry.Params.ParamByName(Self.nomePkLocal) <> nil then
         qry.ParamByName(Self.nomePkLocal).AsInteger := NewId;
@@ -466,8 +471,20 @@ begin
                 qry.ParamByName(name).AsInteger := StrToInt(ValorCampo)
               else if Field.DataType = ftLargeint then
                 qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo)
+              else if Field.DataType in [ftDateTime, ftTimeStamp] then
+              begin
+                ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
+                lFormatSettings.DateSeparator := '/';
+                lFormatSettings.TimeSeparator := ':';
+                lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
+                qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
+              end
               else if Field.DataType = ftCurrency then
-                qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo)
+              begin
+                ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
+              end
               else if Field.DataType = ftFloat then
                 qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo)
               else if Field.DataType = ftBlob then
@@ -499,10 +516,7 @@ begin
         for i := 0 to qry.Params.Count - 1 do
           ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
         vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
-        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
-        Self.log(vLog);
-        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
-        Raise EIntegradorException.Create(vLog);
+          Raise EIntegradorException.Create(vLog);
       end;
     end;
   finally
@@ -870,7 +884,6 @@ begin
   for I := 0 to aDs.FieldCount - 1 do
   begin
     nome := aDs.Fields[i].FieldName;
-    OutputDebugString(PWideChar(nome));
 
     try
     begin
@@ -885,6 +898,8 @@ begin
 
     if (aDs.Fields[i].IsNull) or (fieldValue = '') then
       value := ''
+    else if aDS.Fields[i].DataType = ftDate then
+      Value := aDS.Fields[i].AsString
     else if aDs.Fields[i].DataType = ftBlob then
     begin
       try
@@ -1255,6 +1270,8 @@ begin
 
         try
           saveRecordToRemote(qry, salvou, http);
+          if salvou then
+            Self.Log(Format('Registro %d de %d', [n, total]));
         except
           on e: Exception do
           begin
@@ -1712,7 +1729,7 @@ begin
       _qry.First;
       while not _qry.Eof do
       begin
-        if not self.ContainsKey(Lowercase(_qry.FieldByName('FieldName').AsString)) then
+        if not self.ContainsKey(Lowercase(Trim(_qry.FieldByName('FieldName').AsString))) then
         begin
           _field := TFieldDictionary.Create;
           _field.FieldName := Lowercase(_qry.FieldByName('FieldName').AsString);
@@ -1720,7 +1737,12 @@ begin
             7: //Short
               _FieldType := ftSmallInt;
             8: //INTEGER
-              _FieldType := ftInteger;
+              begin
+                if _qry.FieldByName('SUBTIPO').asInteger = 0 then
+                  _FieldType := ftInteger
+                else
+                  _FieldType := ftCurrency;
+              end;
             10: //Float
               _FieldType := ftFloat;
             12: //Date
@@ -1728,7 +1750,12 @@ begin
             13: //Time
               _FieldType := ftTime;
             16: //int64
-              _FieldType := ftLargeint;
+              begin
+                if _qry.FieldByName('SUBTIPO').asInteger = 0 then
+                  _FieldType := ftLargeint
+                else
+                  _FieldType := ftCurrency;
+              end;
             27: //double
               _FieldType := ftCurrency;
             35: //timestamp
