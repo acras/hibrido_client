@@ -8,8 +8,8 @@ uses
   IdTCPClient, IdCoder, IdCoder3to4, IdCoderUUE, IdCoderXXE, Controls,
   IDataPrincipalUnit, idURI, System.Classes, Windows,
   ISincronizacaoNotifierUnit, Data.SqlExpr,
-  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, HTTPApp,
-  Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON {$ENDIF} {$IFDEF VER300}, System.JSON {$ENDIF};
+  Xml.XMLIntf, Winapi.ActiveX, XML.XMLDoc, System.Generics.Collections, HTTPApp, StrUtils,
+  Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON, Data.DBXPlatform {$ENDIF} {$IFDEF VER300}, System.JSON {$ENDIF};
 
 type
   TDatasetDictionary = class(TDictionary<String, String>)
@@ -465,39 +465,34 @@ begin
               Field := Self.FFieldList.Items[Lowercase(name)];
             if Field <> nil then
             begin
-              if Field.DataType = ftString then
-                qry.ParamByName(name).AsString := ValorCampo
-              else if Field.DataType = ftInteger then
-                qry.ParamByName(name).AsInteger := StrToInt(ValorCampo)
-              else if Field.DataType = ftLargeint then
-                qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo)
-              else if Field.DataType in [ftDateTime, ftTimeStamp] then
-              begin
-                ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
-                lFormatSettings.DateSeparator := '/';
-                lFormatSettings.TimeSeparator := ':';
-                lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
-                qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
-              end
-              else if Field.DataType = ftCurrency then
-              begin
-                ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
-              end
-              else if Field.DataType = ftFloat then
-                qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo)
-              else if Field.DataType = ftBlob then
-              begin
-                BlobStream := TStringStream.Create(ValorCampo);
-                try
-                  qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
-                finally
-                  FreeAndNil(BlobStream);
-                end;
-              end
+              case Field.DataType of
+                ftString: qry.ParamByName(name).AsString := ValorCampo;
+                ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
+                ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+                ftDateTime, ftTimeStamp:
+                  begin
+                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                    ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
+                    lFormatSettings.DateSeparator := '/';
+                    lFormatSettings.TimeSeparator := ':';
+                    lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
+                    qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
+                  end;
+                ftCurrency:
+                  begin
+                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                    qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
+                  end;
+                ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
+                ftBlob: begin
+                          BlobStream := TStringStream.Create(ValorCampo);
+                          try
+                            qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
+                          finally
+                            FreeAndNil(BlobStream);
+                          end;
+                end
               else
-              begin
                 qry.ParamByName(name).AsString := ValorCampo;
               end;
             end;
@@ -1096,7 +1091,7 @@ begin
               txtUpdate := txtUpdate + ', idRemoto = ' + IntToStr(idRemoto);
           end;
 
-          txtUpdate := txtUpdate + ' WHERE salvouRetaguarda = ''N'' and ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
+          txtUpdate := txtUpdate + ' WHERE ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
 
           //da a chance da classe gerenciar redirecionamentos, por exemplo ao descobrir que este registro já
           //existia no remoto e era outro registro neste banco de dados.
@@ -1692,16 +1687,16 @@ end;
 
 procedure TFieldDictionaryList.getTableFields;
 var
-  _qry: TSQLDataSet;
-  _field: TFieldDictionary;
-  _FieldType: TFieldType;
+  lqry: TSQLDataSet;
+  lfield: TFieldDictionary;
+  lFieldType: TFieldType;
 begin
   if (FDm <> nil) and (self.FTableName <> EmptyStr) then
   begin
-    _qry := FDm.getQuery;
+    lqry := FDm.getQuery;
     try
       Self.FTableName := UpperCase(Self.FTableName);
-      _qry.CommandText :=
+      lqry.CommandText :=
         '  SELECT ' +
         '    A.RDB$FIELD_NAME FieldName,' +
         '    C.RDB$TYPE AS DataType,' +
@@ -1725,55 +1720,55 @@ begin
         '  ORDER BY' +
         '    RDB$FIELD_POSITION';
 
-      _qry.Open;
-      _qry.First;
-      while not _qry.Eof do
+      lqry.Open;
+      lqry.First;
+      while not lqry.Eof do
       begin
-        if not self.ContainsKey(Lowercase(Trim(_qry.FieldByName('FieldName').AsString))) then
+        if not self.ContainsKey(Lowercase(Trim(lqry.FieldByName('FieldName').AsString))) then
         begin
-          _field := TFieldDictionary.Create;
-          _field.FieldName := Lowercase(_qry.FieldByName('FieldName').AsString);
-          case _qry.FieldByName('DataType').AsInteger of
+          lfield := TFieldDictionary.Create;
+          lfield.FieldName := Lowercase(lqry.FieldByName('FieldName').AsString);
+          case lqry.FieldByName('DataType').AsInteger of
             7: //Short
-              _FieldType := ftSmallInt;
+              lFieldType := ftSmallInt;
             8: //INTEGER
               begin
-                if _qry.FieldByName('SUBTIPO').asInteger = 0 then
-                  _FieldType := ftInteger
+                if lqry.FieldByName('SUBTIPO').asInteger = 0 then
+                  lFieldType := ftInteger
                 else
-                  _FieldType := ftCurrency;
+                  lFieldType := ftCurrency;
               end;
             10: //Float
-              _FieldType := ftFloat;
+              lFieldType := ftFloat;
             12: //Date
-              _FieldType := ftDate;
+              lFieldType := ftDate;
             13: //Time
-              _FieldType := ftTime;
+              lFieldType := ftTime;
             16: //int64
               begin
-                if _qry.FieldByName('SUBTIPO').asInteger = 0 then
-                  _FieldType := ftLargeint
+                if lqry.FieldByName('SUBTIPO').asInteger = 0 then
+                  lFieldType := ftLargeint
                 else
-                  _FieldType := ftCurrency;
+                  lFieldType := ftCurrency;
               end;
             27: //double
-              _FieldType := ftCurrency;
+              lFieldType := ftCurrency;
             35: //timestamp
-              _FieldType := ftTimeStamp;
+              lFieldType := ftTimeStamp;
             14, 37: //varchar
-              _FieldType := ftString;
+              lFieldType := ftString;
             261: //blob
-              _FieldType := ftBlob
+              lFieldType := ftBlob
             else
-              _FieldType := ftUnknown;
+              lFieldType := ftUnknown;
           end;
-          _field.DataType := _FieldType;
-          Self.Add(LowerCase(Trim(_qry.FieldByName('FieldName').asString)), _field);
+          lfield.DataType := lFieldType;
+          Self.Add(LowerCase(Trim(lqry.FieldByName('FieldName').asString)), lfield);
         end;
-        _qry.Next;
+        lqry.Next;
       end;
     finally
-      _qry.Free;
+      lqry.Free;
     end;
   end;
 end;
