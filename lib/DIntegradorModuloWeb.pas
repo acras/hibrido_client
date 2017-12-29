@@ -224,6 +224,7 @@ type
     function getdmPrincipal: IDataPrincipal; virtual;
     function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
     function DataSetToArray(aDs: TDataSet): TDatasetDictionary; virtual;
+    function BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer): boolean; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -339,7 +340,6 @@ end;
 procedure TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode);
 var
   id: integer;
-  qry: TSQLDataSet;
 begin
   if not singleton then
   begin
@@ -348,13 +348,8 @@ begin
     begin
       dmPrincipal.startTransaction;
       try
-        try
-          qry := dmPrincipal.getQuery;
-          Self.updateInsertRecord(node, id);
-          dmPrincipal.commit;
-        finally
-          FreeAndNil(qry);
-        end;
+        Self.updateInsertRecord(node, id);
+        dmPrincipal.commit;
       except
         on E:Exception do
         begin
@@ -412,6 +407,11 @@ begin
   Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node);
 end;
 
+function TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer): boolean;
+begin
+  Result := True;
+end;
+
 procedure TDataIntegradorModuloWeb.updateInsertRecord(node: IXMLDomNode; const id: integer);
 var
   i: integer;
@@ -426,12 +426,16 @@ var
   Paramlog, vLog: string;
   lFormatSettings: TFormatSettings;
 begin
+  if not Self.beforeUpdateInsertRecord(node, id) then
+    Exit;
+
   Existe := jaExiste(id);
   qry := dmPrincipal.getQuery;
   try
     if Existe then
     begin
       FieldsListUpdate := self.getFieldUpdateList(node);
+      FieldsListUpdate := StringReplace(FieldsListUpdate, ':deleted', '', [rfReplaceAll]);
       qry.CommandText := 'UPDATE ' + nomeTabela + ' SET ' + FieldsListUpdate;
       if DuasVias then
         qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
@@ -441,6 +445,7 @@ begin
     else
     begin
       FieldsListInsert := self.getFieldInsertList(node);
+      FieldsListInsert := StringReplace(FieldsListInsert, ':deleted', '', [rfReplaceAll]);
       NewId := Self.getNewId;
       if NewId > 0 then
       begin
@@ -1109,6 +1114,7 @@ begin
           end;
 
           txtUpdate := txtUpdate + ' WHERE ' + nomePKLocal + ' = ' + ds.fieldByName(nomePKLocal).AsString;
+          txtUpdate := txtUpdate+ ' AND COALESCE(SALVOURETAGUARDA, ''N'') = ''N'' ';
 
           //da a chance da classe gerenciar redirecionamentos, por exemplo ao descobrir que este registro já
           //existia no remoto e era outro registro neste banco de dados.
