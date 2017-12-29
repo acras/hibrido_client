@@ -318,6 +318,7 @@ var
   dm: IDataPrincipal;
   dmIntegrador: TDataIntegradorModuloWeb;
   http: TIdHTTP;
+  lTranslateTableNames: TTranslateTableNames;
 begin
   inherited;
   if salvandoRetaguarda or gravandoVenda then exit;
@@ -333,12 +334,20 @@ begin
       try
         try
           http := getHTTPInstance;
+          lTranslateTableNames := TTranslateTableNames.Create;
           for i := 0 to length(sincronizador.posterDataModules)-1 do
           begin
             if not Self.ShouldContinue then
               Break;
             dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
             try
+              if (dmIntegrador.getNomeTabela <> EmptyStr) and (dmIntegrador.getNomeSingular <> EmptyStr) then
+              begin
+                if not lTranslateTableNames.ContainsKey(dmIntegrador.getNomeTabela) then
+                  lTranslateTableNames.Add(LowerCase(Trim(dmIntegrador.getNomeTabela)), LowerCase(Trim(dmIntegrador.getNomeSingular)));
+              end;
+
+              dmIntegrador.SetTranslateTableNames(lTranslateTableNames);
               dmIntegrador.notifier := FNotifier;
               dmIntegrador.threadControl := Self.FthreadControl;
               dmIntegrador.CustomParams := Self.FCustomParams;
@@ -359,6 +368,7 @@ begin
         dm := nil;
         if http <> nil then
           FreeAndNil(http);
+        FreeAndNil(lTranslateTableNames);
       end;
     finally
       CoUninitialize;

@@ -15,6 +15,9 @@ type
   TDatasetDictionary = class(TDictionary<String, String>)
   end;
 
+  TTranslateTableNames = class(TDictionary<String, String>)
+  end;
+
   TFieldDictionary = class
   private
    FFieldName: string;
@@ -107,7 +110,7 @@ type
   public
     tabelasDetalhe: array of TTabelaDetalhe;
     translations: TTranslationSet;
-    constructor create;
+    constructor Create;
     property nomeTabela: string read GetNomeTabela write setNomeTabela;
     property nomeFK: string read GetNomeFK write setNomeFK;
     property nomePK: string read GetNomePK write setNomePK;
@@ -139,6 +142,7 @@ type
     FDetailList: TDictionary<String, TJSONArrayContainer>;
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
+    FTranslateTableNames: TTranslateTableNames;
     nomeTabela: string;
     nomeSingular: string;
     nomePlural: string;
@@ -238,6 +242,9 @@ type
     function getHumanReadableName: string; virtual;
     property DataLog: ILog read FDataLog write SetDataLog;
     destructor Destroy; override;
+    function getNomeTabela: string;
+    function getNomeSingular: string;
+    procedure SetTranslateTableNames(aTranslateTableNames: TTranslateTableNames);
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -944,6 +951,16 @@ begin
   Result := 0;
 end;
 
+function TDataIntegradorModuloWeb.getNomeSingular: string;
+begin
+  Result := Self.nomeSingular
+end;
+
+function TDataIntegradorModuloWeb.getNomeTabela: string;
+begin
+  Result := Self.nomeTabela
+end;
+
 procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
 var
   JMaster, JResponse: TJsonObject;
@@ -1550,6 +1567,11 @@ end;
 procedure TDataIntegradorModuloWeb.SetthreadControl(const Value: IThreadControl);
 begin
   FthreadControl := Value;
+end;
+
+procedure TDataIntegradorModuloWeb.SetTranslateTableNames(aTranslateTableNames: TTranslateTableNames);
+begin
+  Self.FTranslateTableNames := aTranslateTableNames;
 end;
 
 function TDataIntegradorModuloWeb.getdmPrincipal: IDataPrincipal;
