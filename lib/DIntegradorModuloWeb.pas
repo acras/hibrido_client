@@ -211,7 +211,7 @@ type
     function getObjectsList: string; virtual;
     function getUpdateStatement(node: IXMLDomNode; const id: integer): String; virtual;
     function getInsertStatement(node: IXMLDomNode): String; virtual;
-    function getNewId: Integer; virtual;
+    function getNewId(node: IXMLDomNode): Integer; virtual;
     function post(ds: TDataSet; http: TidHTTP; url: string): string; virtual;
     procedure addDetailsToJsonList(aDs: TDataSet); virtual;
     procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe); virtual;
@@ -446,7 +446,7 @@ begin
     begin
       FieldsListInsert := self.getFieldInsertList(node);
       FieldsListInsert := StringReplace(FieldsListInsert, ':deleted', '', [rfReplaceAll]);
-      NewId := Self.getNewId;
+      NewId := Self.getNewId(Node);
       if NewId > 0 then
       begin
         if Pos(':'+Self.nomePKLocal +',', FieldsListInsert) = 0 then
@@ -623,7 +623,7 @@ begin
     if nomeGenerator <> '' then
       result := result + 'gen_id(' + nomeGenerator + ',1), '
     else
-      Result := Result + IntToStr(getNewId) + ', ';
+      Result := Result + IntToStr(getNewId(Node)) + ', ';
   end;
   if duasVias then
     result := result + QuotedStr('S') + ', ';
@@ -951,7 +951,7 @@ begin
   end;
 end;
 
-function TDataIntegradorModuloWeb.getNewId: Integer;
+function TDataIntegradorModuloWeb.getNewId(node: IXMLDomNode): Integer;
 begin
   Result := 0;
 end;
