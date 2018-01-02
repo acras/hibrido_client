@@ -976,10 +976,14 @@ begin
   try
     JMaster := Self.getJsonObject(aDs, Self.translations, Dict);
     JResponse := TJSONObject.Create;
-    jResponse.AddPair(Self.nomeSingularSave, JMaster);
-    for Item in Self.FDetailList do
-      JMaster.AddPair(item.Key, Item.Value.getJsonArray);
-    apStream.WriteString(JResponse.ToString);
+    try
+      jResponse.AddPair(Self.nomeSingularSave, JMaster);
+      for Item in Self.FDetailList do
+        JMaster.AddPair(item.Key, Item.Value.getJsonArray);
+      apStream.WriteString(JResponse.ToString);
+    finally
+      JResponse.Free;
+    end;
   finally
     Dict.Free;
   end;
