@@ -142,10 +142,10 @@ begin
           Break;
 
         block := getterBlocks[i];
-        for j := 0 to length(block) - 1 do
-        begin
-          dm.startTransaction;
-          try
+        dm.startTransaction;
+        try
+          for j := 0 to length(block) - 1 do
+          begin
             if not Self.ShouldContinue then
               Break;
 
@@ -162,17 +162,17 @@ begin
             finally
               dimw.free;
             end;
-            dm.commit;
-          except
-            on E: Exception do
+          end;
+          dm.commit;
+        except
+          on E: Exception do
+          begin
+            dm.rollback;
+            if assigned (self.FDataLog) then
             begin
-              dm.rollback;
-              if assigned (self.FDataLog) then
-              begin
-                SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
-                Self.FDataLog.log(Format('Erro em GetUpdateData para a classe "%s":'+#13#10+'%s', [dimwName,e.Message]));
-                SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
-              end;
+              SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
+              Self.FDataLog.log(Format('Erro em GetUpdateData para a classe "%s":'+#13#10+'%s', [dimwName,e.Message]));
+              SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
             end;
           end;
         end;
