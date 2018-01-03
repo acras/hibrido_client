@@ -435,7 +435,6 @@ begin
     if Existe then
     begin
       FieldsListUpdate := self.getFieldUpdateList(node);
-      FieldsListUpdate := StringReplace(FieldsListUpdate, ':deleted', '', [rfReplaceAll]);
       qry.CommandText := 'UPDATE ' + nomeTabela + ' SET ' + FieldsListUpdate;
       if DuasVias then
         qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
@@ -445,7 +444,6 @@ begin
     else
     begin
       FieldsListInsert := self.getFieldInsertList(node);
-      FieldsListInsert := StringReplace(FieldsListInsert, ':deleted', '', [rfReplaceAll]);
       NewId := Self.getNewId(Node);
       if NewId > 0 then
       begin
