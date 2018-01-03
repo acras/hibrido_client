@@ -224,7 +224,7 @@ type
     function getdmPrincipal: IDataPrincipal; virtual;
     function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
     function DataSetToArray(aDs: TDataSet): TDatasetDictionary; virtual;
-    function BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer): boolean; virtual;
+    procedure BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean); virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -407,9 +407,9 @@ begin
   Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node);
 end;
 
-function TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer): boolean;
+procedure TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean);
 begin
-  Result := True;
+  handled := False;
 end;
 
 procedure TDataIntegradorModuloWeb.updateInsertRecord(node: IXMLDomNode; const id: integer);
@@ -425,107 +425,110 @@ var
   NewId: integer;
   Paramlog, vLog: string;
   lFormatSettings: TFormatSettings;
+  handled : boolean;
 begin
-  if not Self.beforeUpdateInsertRecord(node, id) then
-    Exit;
-
-  Existe := jaExiste(id);
-  qry := dmPrincipal.getQuery;
-  try
-    if Existe then
-    begin
-      FieldsListUpdate := self.getFieldUpdateList(node);
-      qry.CommandText := 'UPDATE ' + nomeTabela + ' SET ' + FieldsListUpdate;
-      if DuasVias then
-        qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
-      else
-        qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
-    end
-    else
-    begin
-      FieldsListInsert := self.getFieldInsertList(node);
-      NewId := Self.getNewId(Node);
-      if NewId > 0 then
+  handled := False;
+  Self.BeforeUpdateInsertRecord(node, id, handled);
+  if not handled then
+  begin
+    Existe := jaExiste(id);
+    qry := dmPrincipal.getQuery;
+    try
+      if Existe then
       begin
-        if Pos(':'+Self.nomePKLocal +',', FieldsListInsert) = 0 then
-          FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
-      end;
-      qry.CommandText := 'INSERT INTO ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
-      if qry.Params.ParamByName(Self.nomePkLocal) <> nil then
-        qry.ParamByName(Self.nomePkLocal).AsInteger := NewId;
-    end;
-
-    //Preenche os Parametros
-    for i := 0 to node.childNodes.length - 1 do
-    begin
-      name := translateFieldNameServerToPdv(node.childNodes.item[i]);
-      ValorCampo := translateFieldValue(node.childNodes.item[i]);
-      if name <> '*' then
-        if Self.getIncludeFieldNameOnList(dmUpdate, name) then
+        FieldsListUpdate := self.getFieldUpdateList(node);
+        qry.CommandText := 'UPDATE ' + nomeTabela + ' SET ' + FieldsListUpdate;
+        if DuasVias then
+          qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
+        else
+          qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
+      end
+      else
+      begin
+        FieldsListInsert := self.getFieldInsertList(node);
+        NewId := Self.getNewId(Node);
+        if NewId > 0 then
         begin
-          if ValorCampo = 'NULL' then
+          if Pos(':'+Self.nomePKLocal +',', FieldsListInsert) = 0 then
+            FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
+        end;
+        qry.CommandText := 'INSERT INTO ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
+        if qry.Params.ParamByName(Self.nomePkLocal) <> nil then
+          qry.ParamByName(Self.nomePkLocal).AsInteger := NewId;
+      end;
+
+      //Preenche os Parametros
+      for i := 0 to node.childNodes.length - 1 do
+      begin
+        name := translateFieldNameServerToPdv(node.childNodes.item[i]);
+        ValorCampo := translateFieldValue(node.childNodes.item[i]);
+        if name <> '*' then
+          if Self.getIncludeFieldNameOnList(dmUpdate, name) then
           begin
-            qry.ParamByName(name).Value := unassigned;
-            qry.ParamByName(name).DataType := ftString;
-          end
-          else
-          begin
-            Field := nil;
-            if Self.FFieldList <> nil then
-              Field := Self.FFieldList.Items[Lowercase(name)];
-            if Field <> nil then
+            if ValorCampo = 'NULL' then
             begin
-              case Field.DataType of
-                ftString: qry.ParamByName(name).AsString := ValorCampo;
-                ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
-                ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
-                ftDateTime, ftTimeStamp:
-                  begin
-                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                    ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
-                    lFormatSettings.DateSeparator := '/';
-                    lFormatSettings.TimeSeparator := ':';
-                    lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
-                    qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
-                  end;
-                ftCurrency:
-                  begin
-                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                    qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
-                  end;
-                ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
-                ftBlob: begin
-                          BlobStream := TStringStream.Create(ValorCampo);
-                          try
-                            qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
-                          finally
-                            FreeAndNil(BlobStream);
-                          end;
-                end
-              else
-                qry.ParamByName(name).AsString := ValorCampo;
+              qry.ParamByName(name).Value := unassigned;
+              qry.ParamByName(name).DataType := ftString;
+            end
+            else
+            begin
+              Field := nil;
+              if Self.FFieldList <> nil then
+                Field := Self.FFieldList.Items[Lowercase(name)];
+              if Field <> nil then
+              begin
+                case Field.DataType of
+                  ftString: qry.ParamByName(name).AsString := ValorCampo;
+                  ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
+                  ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+                  ftDateTime, ftTimeStamp:
+                    begin
+                      ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                      ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
+                      lFormatSettings.DateSeparator := '/';
+                      lFormatSettings.TimeSeparator := ':';
+                      lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
+                      qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
+                    end;
+                  ftCurrency:
+                    begin
+                      ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                      qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
+                    end;
+                  ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
+                  ftBlob: begin
+                            BlobStream := TStringStream.Create(ValorCampo);
+                            try
+                              qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
+                            finally
+                              FreeAndNil(BlobStream);
+                            end;
+                  end
+                else
+                  qry.ParamByName(name).AsString := ValorCampo;
+                end;
               end;
             end;
           end;
-        end;
-    end;
-
-    if Existe then
-      beforeUpdateRecord(id);
-    try
-      qry.ExecSQL;
-    except
-      on E:Exception do
-      begin
-        ParamLog := EmptyStr;
-        for i := 0 to qry.Params.Count - 1 do
-          ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
-        vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
-          Raise EIntegradorException.Create(vLog);
       end;
+
+      if Existe then
+        beforeUpdateRecord(id);
+      try
+        qry.ExecSQL;
+      except
+        on E:Exception do
+        begin
+          ParamLog := EmptyStr;
+          for i := 0 to qry.Params.Count - 1 do
+            ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
+          vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
+            Raise EIntegradorException.Create(vLog);
+        end;
+      end;
+    finally
+      FreeAndNil(qry);
     end;
-  finally
-    FreeAndNil(qry);
   end;
 end;
 
