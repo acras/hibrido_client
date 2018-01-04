@@ -83,43 +83,7 @@ type
     function getJsonArray: TJsonArray;
   end;
 
-  TTabelaDetalhe = class
-  private
-    FNomeTabela: string;
-    FnomeFK: string;
-    FnomePK: string;
-    FnomeParametro: string;
-    FnomeSingularDetalhe: string;
-    FnomePluralDetalhe: string;
-    FFieldList : TFieldDictionaryList;
-    FDm : IDataPrincipal;
-  protected
-    function GetNomeTabela: string; virtual;
-    procedure setNomeTabela(const Value: string); virtual;
-    function GetNomeFK: string; virtual;
-    function GetNomePK: string; virtual;
-    procedure setNomeFK(const Value: string); virtual;
-    procedure setNomePK(const Value: string); virtual;
-    function GetNomeParametro: string; virtual;
-    procedure setNomeParametro(const Value: string); virtual;
-    function GetNomePluralDetalhe: string; virtual;
-    function GetNomeSingularDetalhe: string; virtual;
-    procedure setNomePluralDetalhe(const Value: string); virtual;
-    procedure setNomeSingularDetalhe(const Value: string); virtual;
-    procedure setDmPrincipal(const Value: IDataPrincipal); virtual;
-  public
-    tabelasDetalhe: array of TTabelaDetalhe;
-    translations: TTranslationSet;
-    constructor Create;
-    property nomeTabela: string read GetNomeTabela write setNomeTabela;
-    property nomeFK: string read GetNomeFK write setNomeFK;
-    property nomePK: string read GetNomePK write setNomePK;
-    property nomeParametro: string read GetNomeParametro write setNomeParametro;
-    property nomeSingularDetalhe: string read GetNomeSingularDetalhe write setNomeSingularDetalhe;
-    property nomePluralDetalhe: string read GetNomePluralDetalhe write setNomePluralDetalhe;
-    property DmPrincipal: IDataPrincipal read FDm write setDmPrincipal;
-    destructor Destroy; override;
-  end;
+  TTabelaDetalhe = class;
 
   TDataIntegradorModuloWeb = class(TDataModule)
     procedure DataModuleCreate(Sender: TObject);
@@ -137,16 +101,16 @@ type
     procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
-    function getFieldInsertList(node: IXMLDomNode): string;
+    function getFieldInsertList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
   protected
     FDetailList: TDictionary<String, TJSONArrayContainer>;
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
     FTranslateTableNames: TTranslateTableNames;
-    nomeTabela: string;
-    nomeSingular: string;
-    nomePlural: string;
-    nomePKLocal: string;
+    FnomeTabela: string;
+    FnomeSingular: string;
+    FNomePlural: string;
+    FnomePKLocal: string;
     nomePKRemoto: string;
     nomeGenerator: string;
     usePKLocalMethod: Boolean;
@@ -166,13 +130,13 @@ type
     function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string; virtual;
     procedure importRecord(node: IXMLDomNode);
     procedure updateInsertRecord(node: IXMLDomNode; const id: integer);
-    function jaExiste(id: integer): boolean;
+    function jaExiste(const id: integer; const tableName, nomePk: string): boolean;
     function getFieldList(node: IXMLDomNode): string;
-    function getFieldUpdateList(node: IXMLDomNode): string;
-    function getFieldValues(node: IXMLDomNode): string;
+    function getFieldUpdateList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
+    function getFieldValues(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
     function translateFieldValue(node: IXMLDomNode): string; virtual;
     function translateFieldNamePdvToServer(node: IXMLDomNode): string;
-    function translateFieldNameServerToPdv(node: IXMLDomNode): string; virtual;
+    function translateFieldNameServerToPdv(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string; virtual;
     function translateTypeValue(fieldType, fieldValue: string): string;
     function translateValueToServer(translation: TNameTranslation;
       fieldName: string; field: TField;
@@ -192,7 +156,7 @@ type
     procedure prepareMultipartParams(ds: TDataSet;
       multipartParams: TIdMultiPartFormDataStream); virtual; abstract;
     function singleton: boolean;
-    function getUpdateBaseSQL(node: IXMLDOMNode): string;
+    function getUpdateBaseSQL(node: IXMLDOMNode; Integrador: TDataIntegradorModuloWeb): string;
     procedure addDetails(ds: TDataSet; params: TStringList);
     function addTranslatedParams(ds: TDataSet;
       params: TStringList;
@@ -225,6 +189,14 @@ type
     function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
     function DataSetToArray(aDs: TDataSet): TDatasetDictionary; virtual;
     procedure BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean); virtual;
+    procedure ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb); virtual;
+    function getTranslatedTable(const aServerName: string): TDataIntegradorModuloWeb; virtual;
+    function getNomeSingular: string; virtual;
+    procedure SetNomeSingular(const Value: string); virtual;
+    function GetNomePlural: string; virtual;
+    procedure setNomePlural(const Value: string); virtual;
+    function GetNomePKLocal: string; virtual;
+    procedure setNomePKLocal(const Value: string); virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -243,12 +215,32 @@ type
     function getHumanReadableName: string; virtual;
     property DataLog: ILog read FDataLog write SetDataLog;
     destructor Destroy; override;
-    function getNomeTabela: string;
-    function getNomeSingular: string;
+    function getNomeTabela: string; virtual;
+    procedure setNomeTabela(const Value: string); virtual;
     procedure SetTranslateTableNames(aTranslateTableNames: TTranslateTableNames);
+    property nomeTabela: string read GetNomeTabela write setNomeTabela;
+    property NomeSingular: string read getNomeSingular write SetNomeSingular;
+    property nomePlural: string read GetNomePlural write setNomePlural;
+    property nomePKLocal: string read GetNomePKLocal write setNomePKLocal;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
+
+  TTabelaDetalhe = class(TDataIntegradorModuloWeb)
+  private
+    FnomeParametro: string;
+    FnomeFK: string;
+  protected
+    function GetNomeParametro: string; virtual;
+    procedure setNomeParametro(const Value: string); virtual;
+    function GetNomeFK: string; virtual;
+    procedure setNomeFK(const Value: string); virtual;
+  public
+    constructor Create(AOwner: TComponent);
+    destructor Destroy; override;
+    property nomeParametro: string read GetNomeParametro write setNomeParametro;
+    property nomeFK: string read GetNomeFK write setNomeFK;
+  end;
 
 var
   DataIntegradorModuloWeb: TDataIntegradorModuloWeb;
@@ -265,7 +257,7 @@ end;
 
 function TDataIntegradorModuloWeb.getObjectsList: string;
 begin
-  Result := '/' + dasherize(nomePlural) + '//' + dasherize(nomeSingular);
+  Result := '/' + dasherize(nomePlural) + '//' + dasherize(FnomeSingular);
 end;
 
 procedure TDataIntegradorModuloWeb.getDadosAtualizados(http: TIdHTTP = nil);
@@ -358,6 +350,7 @@ begin
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
           Self.log(e.Message);
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+          //raise; //??
         end;
       end;
     end;
@@ -378,14 +371,14 @@ begin
   result := (nomePKLocal = '') and (nomePKRemoto = '');
 end;
 
-function TDataIntegradorModuloWeb.jaExiste(id: integer): boolean;
+function TDataIntegradorModuloWeb.jaExiste(const id: integer; const tableName, nomePk: string): boolean;
 var
   qry: string;
 begin
   if duasVias then
-    qry := 'SELECT count(1) FROM ' + nomeTabela + ' where idRemoto = ' + IntToStr(id)
+    qry := 'SELECT count(1) FROM ' + tableName + ' where idRemoto = ' + IntToStr(id)
   else
-    qry := 'SELECT count(1) FROM ' + nomeTabela + ' where ' + nomePKLocal + ' = ' + IntToStr(id);
+    qry := 'SELECT count(1) FROM ' + tableName + ' where ' + nomePK + ' = ' + IntToStr(id);
   result := dmPrincipal.getSQLIntegerResult(qry) > 0;
 end;
 
@@ -397,14 +390,14 @@ end;
 function TDataIntegradorModuloWeb.getUpdateStatement(node: IXMLDomNode; const id: integer): String;
 begin
   if duasVias then
-    Result := getUpdateBaseSQL(node) + ' WHERE idRemoto = ' + IntToStr(id)
+    Result := getUpdateBaseSQL(node, Self) + ' WHERE idRemoto = ' + IntToStr(id)
   else
-    Result := getUpdateBaseSQL(node) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
+    Result := getUpdateBaseSQL(node, Self) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
 end;
 
 function TDataIntegradorModuloWeb.getInsertStatement(node: IXMLDomNode): String;
 begin
-  Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node);
+  Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node, Self);
 end;
 
 procedure TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean);
@@ -412,7 +405,21 @@ begin
   handled := False;
 end;
 
-procedure TDataIntegradorModuloWeb.updateInsertRecord(node: IXMLDomNode; const id: integer);
+function TDataIntegradorModuloWeb.getTranslatedTable(const aServerName: string): TDataIntegradorModuloWeb;
+var
+  i: integer;
+begin
+  Result := nil;
+  for i := 0 to Length(Self.tabelasDetalhe) - 1 do
+    if AnsiSameText(underscorize(aServerName), Self.tabelasDetalhe[i].nomePlural) then
+    begin
+      Result := Self.tabelasDetalhe[i];
+      break;
+    end;
+end;
+
+
+procedure TDataIntegradorModuloWeb.ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb);
 var
   i: integer;
   name: string;
@@ -420,116 +427,161 @@ var
   FieldsListUpdate, FieldsListInsert : string;
   ValorCampo: string;
   BlobStream: TStringStream;
+  Paramlog, vLog: string;
+  lFormatSettings: TFormatSettings;
   Existe: Boolean;
   Field: TFieldDictionary;
   NewId: integer;
-  Paramlog, vLog: string;
-  lFormatSettings: TFormatSettings;
+  ChildrenNodes: TDictionary<string, IXMLDomNode>;
+  ChildNode: TPair<string, IXMLDomNode>;
+  ChildId: integer;
+  handled : boolean;
+  list : IXMLDomNodeList;
+  numRegistros: integer;
+  nodeItem : IXMLDomNode;
+  Detail: TDataIntegradorModuloWeb;
+begin
+  Existe := jaExiste(id, Integrador.nomeTabela, Integrador.nomePKLocal);
+  qry := dmPrincipal.getQuery;
+  ChildrenNodes := TDictionary<string, IXMLDomNode>.Create;
+  try
+    if Existe then
+    begin
+      FieldsListUpdate := self.getFieldUpdateList(node, Integrador);
+      qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET ' + FieldsListUpdate;
+      if DuasVias then
+        qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
+      else
+        qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
+    end
+    else
+    begin
+      FieldsListInsert := self.getFieldInsertList(node, Integrador);
+      NewId := Self.getNewId(Node);
+      if NewId > 0 then
+      begin
+        if Pos(':'+Self.nomePKLocal +',', FieldsListInsert) = 0 then
+          FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
+      end;
+      qry.CommandText := 'INSERT INTO ' + Integrador.nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
+      if qry.Params.ParamByName(Self.nomePkLocal) <> nil then
+        qry.ParamByName(Self.nomePkLocal).AsInteger := NewId;
+    end;
+
+    //Preenche os Parametros
+    for i := 0 to node.childNodes.length - 1 do
+    begin
+      if (node.childNodes[i].attributes.getNamedItem('type') <> nil) and (node.childNodes[i].attributes.getNamedItem('type').text = 'array') then
+      begin
+        if not ChildrenNodes.ContainsKey(node.childNodes[i].nodeName) then
+          ChildrenNodes.Add(node.childNodes[i].nodeName, node.childNodes[i]);
+      end;
+
+      name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
+      ValorCampo := translateFieldValue(node.childNodes.item[i]);
+      if name <> '*' then
+        if Self.getIncludeFieldNameOnList(dmUpdate, name) then
+        begin
+          if ValorCampo = 'NULL' then
+          begin
+            qry.ParamByName(name).Value := unassigned;
+            qry.ParamByName(name).DataType := ftString;
+          end
+          else
+          begin
+            Field := nil;
+            if Self.FFieldList <> nil then
+              Field := Self.FFieldList.Items[Lowercase(name)];
+            if Field <> nil then
+            begin
+              case Field.DataType of
+                ftString: qry.ParamByName(name).AsString := ValorCampo;
+                ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
+                ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+                ftDateTime, ftTimeStamp:
+                  begin
+                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                    ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
+                    lFormatSettings.DateSeparator := '/';
+                    lFormatSettings.TimeSeparator := ':';
+                    lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
+                    qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
+                  end;
+                ftCurrency:
+                  begin
+                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                    qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
+                  end;
+                ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
+                ftBlob: begin
+                          BlobStream := TStringStream.Create(ValorCampo);
+                          try
+                            qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
+                          finally
+                            FreeAndNil(BlobStream);
+                          end;
+                end
+              else
+                qry.ParamByName(name).AsString := ValorCampo;
+              end;
+            end;
+          end;
+        end;
+    end;
+
+    if Existe then
+      beforeUpdateRecord(id);
+    try
+      qry.ExecSQL;
+    except
+      on E:Exception do
+      begin
+        ParamLog := EmptyStr;
+        for i := 0 to qry.Params.Count - 1 do
+          ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
+        vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
+          Raise EIntegradorException.Create(vLog);
+      end;
+    end;
+
+    for ChildNode in ChildrenNodes do
+    begin
+      Detail := Self.getTranslatedTable(ChildNode.Key);
+      if Detail <> nil then
+      begin
+        list := ChildNode.Value.selectNodes(ChildNode.Key);
+        if list <> nil then
+        begin
+          numRegistros := list.length;
+          for i := 0 to numRegistros-1 do
+          begin
+            nodeItem := list.item[i];
+            ChildId := 0;
+            if nodeItem.selectSingleNode('./id') <> nil then
+              ChildId := StrToIntDef(nodeItem.selectSingleNode('./id').text, 0);
+            handled := False;
+            Self.BeforeUpdateInsertRecord(nodeItem, ChildId, handled);
+            if not handled then
+              Self.ExecInsertRecord(nodeItem, ChildId, Detail);
+          end;
+        end;
+      end;
+    end;
+
+  finally
+    FreeAndNil(qry);
+    FreeAndNil(ChildrenNodes);
+  end;
+end;
+
+procedure TDataIntegradorModuloWeb.updateInsertRecord(node: IXMLDomNode; const id: integer);
+var
   handled : boolean;
 begin
   handled := False;
   Self.BeforeUpdateInsertRecord(node, id, handled);
   if not handled then
-  begin
-    Existe := jaExiste(id);
-    qry := dmPrincipal.getQuery;
-    try
-      if Existe then
-      begin
-        FieldsListUpdate := self.getFieldUpdateList(node);
-        qry.CommandText := 'UPDATE ' + nomeTabela + ' SET ' + FieldsListUpdate;
-        if DuasVias then
-          qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
-        else
-          qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
-      end
-      else
-      begin
-        FieldsListInsert := self.getFieldInsertList(node);
-        NewId := Self.getNewId(Node);
-        if NewId > 0 then
-        begin
-          if Pos(':'+Self.nomePKLocal +',', FieldsListInsert) = 0 then
-            FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
-        end;
-        qry.CommandText := 'INSERT INTO ' + nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
-        if qry.Params.ParamByName(Self.nomePkLocal) <> nil then
-          qry.ParamByName(Self.nomePkLocal).AsInteger := NewId;
-      end;
-
-      //Preenche os Parametros
-      for i := 0 to node.childNodes.length - 1 do
-      begin
-        name := translateFieldNameServerToPdv(node.childNodes.item[i]);
-        ValorCampo := translateFieldValue(node.childNodes.item[i]);
-        if name <> '*' then
-          if Self.getIncludeFieldNameOnList(dmUpdate, name) then
-          begin
-            if ValorCampo = 'NULL' then
-            begin
-              qry.ParamByName(name).Value := unassigned;
-              qry.ParamByName(name).DataType := ftString;
-            end
-            else
-            begin
-              Field := nil;
-              if Self.FFieldList <> nil then
-                Field := Self.FFieldList.Items[Lowercase(name)];
-              if Field <> nil then
-              begin
-                case Field.DataType of
-                  ftString: qry.ParamByName(name).AsString := ValorCampo;
-                  ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
-                  ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
-                  ftDateTime, ftTimeStamp:
-                    begin
-                      ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                      ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
-                      lFormatSettings.DateSeparator := '/';
-                      lFormatSettings.TimeSeparator := ':';
-                      lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
-                      qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
-                    end;
-                  ftCurrency:
-                    begin
-                      ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                      qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
-                    end;
-                  ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
-                  ftBlob: begin
-                            BlobStream := TStringStream.Create(ValorCampo);
-                            try
-                              qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
-                            finally
-                              FreeAndNil(BlobStream);
-                            end;
-                  end
-                else
-                  qry.ParamByName(name).AsString := ValorCampo;
-                end;
-              end;
-            end;
-          end;
-      end;
-
-      if Existe then
-        beforeUpdateRecord(id);
-      try
-        qry.ExecSQL;
-      except
-        on E:Exception do
-        begin
-          ParamLog := EmptyStr;
-          for i := 0 to qry.Params.Count - 1 do
-            ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
-          vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
-            Raise EIntegradorException.Create(vLog);
-        end;
-      end;
-    finally
-      FreeAndNil(qry);
-    end;
-  end;
+    Self.ExecInsertRecord(node, id, Self);
 end;
 
 procedure TDataIntegradorModuloWeb.UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
@@ -543,8 +595,8 @@ begin
   try
     for i := low(pTabelasDetalhe) to high(pTabelasDetalhe) do
     begin
-      vNomePlural := pTabelasDetalhe[i].nomePluralDetalhe;
-      vNomeSingular := pTabelasDetalhe[i].nomeSingularDetalhe;
+      vNomePlural := pTabelasDetalhe[i].nomePlural;
+      vNomeSingular := pTabelasDetalhe[i].FnomeSingular;
 
       if VNomePlural = EmptyStr then
       begin
@@ -569,7 +621,7 @@ begin
         if duasVias then
           dmPrincipal.execSQL('UPDATE ' + pTabelasDetalhe[i].nomeTabela + ' SET salvouRetaguarda = ' +
                           QuotedStr('S') + ', idRemoto = ' + vIdRemoto +
-                          ' WHERE salvouRetaguarda = ''N'' and ' + pTabelasDetalhe[i].nomePK + ' = ' + vPkLocal) ;
+                          ' WHERE salvouRetaguarda = ''N'' and ' + pTabelasDetalhe[i].nomePKLocal + ' = ' + vPkLocal) ;
       end;
       if (Length(pTabelasDetalhe[i].tabelasDetalhe) > 0) and (vNode <> nil) then
         Self.UpdateRecordDetalhe(vNode, pTabelasDetalhe[i].tabelasDetalhe);
@@ -583,12 +635,12 @@ procedure TDataIntegradorModuloWeb.updateSingletonRecord(node: IXMLDOMNode);
 begin
   if dmPrincipal.getSQLIntegerResult('SELECT count(1) from ' + nomeTabela) < 1 then
     dmPrincipal.execSQL('Insert into ' + nomeTabela + ' DEFAULT VALUES');
-  dmPrincipal.execSQL(getUpdateBaseSQL(node));
+  dmPrincipal.execSQL(getUpdateBaseSQL(node, Self));
 end;
 
-function TDataIntegradorModuloWeb.getUpdateBaseSQL(node: IXMLDOMNode): string;
+function TDataIntegradorModuloWeb.getUpdateBaseSQL(node: IXMLDOMNode; Integrador: TDataIntegradorModuloWeb): string;
 begin
-  result := 'UPDATE ' + nomeTabela + getFieldUpdateList(node);
+  result := 'UPDATE ' + Integrador.nomeTabela + getFieldUpdateList(node, Integrador);
 end;
 
 function TDataIntegradorModuloWeb.getFieldList(node: IXMLDomNode): string;
@@ -603,7 +655,7 @@ begin
     result := result + 'salvouRetaguarda, ';
   for i := 0 to node.childNodes.length - 1 do
   begin
-    name := translateFieldNameServerToPdv(node.childNodes.item[i]);
+    name := translateFieldNameServerToPdv(node.childNodes.item[i], Self);
     if name <> '*' then
       if Self.getIncludeFieldNameOnList(dmInsert, name) then
         result := result + name + ', ';
@@ -613,7 +665,7 @@ begin
   result := result + ')';
 end;
 
-function TDataIntegradorModuloWeb.getFieldValues(node: IXMLDomNode): string;
+function TDataIntegradorModuloWeb.getFieldValues(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
 var
   i: integer;
   name: string;
@@ -630,7 +682,7 @@ begin
     result := result + QuotedStr('S') + ', ';
   for i := 0 to node.childNodes.length - 1 do
   begin
-    name := translateFieldNameServerToPdv(node.childNodes.item[i]);
+    name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
     if name <> '*' then
       if Self.getIncludeFieldNameOnList(dmInsert, name) then
         result := result + translateFieldValue(node.childNodes.item[i]) + ', ';
@@ -640,7 +692,7 @@ begin
   result := result + ')';
 end;
 
-function TDataIntegradorModuloWeb.getFieldUpdateList(node: IXMLDomNode): string;
+function TDataIntegradorModuloWeb.getFieldUpdateList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
 var
   i: integer;
   name: string;
@@ -648,7 +700,7 @@ begin
   result := '';
   for i := 0 to node.childNodes.length - 1 do
   begin
-    name := translateFieldNameServerToPdv(node.childNodes.item[i]);
+    name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
     if name <> '*' then
       if Self.getIncludeFieldNameOnList(dmUpdate, name) then
         result := result + ' ' + name + ' = :' + name + ',';
@@ -658,7 +710,7 @@ begin
   result := result + getFieldAdditionalUpdateList(node);
 end;
 
-function TDataIntegradorModuloWeb.getFieldInsertList(node: IXMLDomNode): string;
+function TDataIntegradorModuloWeb.getFieldInsertList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
 var
   i: integer;
   name: string;
@@ -666,7 +718,7 @@ begin
   Result := '';
   for i := 0 to node.childNodes.length - 1 do
   begin
-    name := translateFieldNameServerToPdv(node.childNodes.item[i]);
+    name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
     if name <> '*' then
       if Self.getIncludeFieldNameOnList(dmInsert, name) then
         Result := Result + ' :' + name + ',';
@@ -738,10 +790,9 @@ begin
   end;
 end;
 
-function TDataIntegradorModuloWeb.translateFieldNameServerToPdv(
-  node: IXMLDomNode): string;
+function TDataIntegradorModuloWeb.translateFieldNameServerToPdv(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
 begin
-  result := translations.translateServerToPDV(node.nodeName, duasVias);
+  result := Integrador.translations.translateServerToPDV(node.nodeName, duasVias);
   if result = '' then
     result := StringReplace(node.nodeName, '-', '', [rfReplaceAll]);
 end;
@@ -817,10 +868,10 @@ begin
                if not Self.FDetailList.ContainsKey(aTabelaDetalhe.nomeParametro) then
                begin
                  jsonArrayDetails := TJSONArrayContainer.Create;
-                 jsonArrayDetails.nomePluralDetalhe := aTabelaDetalhe.nomePluralDetalhe;
-                 jsonArrayDetails.nomeSingularDetalhe := aTabelaDetalhe.nomeSingularDetalhe;
+                 jsonArrayDetails.nomePluralDetalhe := aTabelaDetalhe.nomePlural;
+                 jsonArrayDetails.nomeSingularDetalhe := aTabelaDetalhe.FnomeSingular;
                  jsonArrayDetails.nomeTabela := aTabelaDetalhe.nomeTabela;
-                 jsonArrayDetails.nomePkLocal := aTabelaDetalhe.nomePK;
+                 jsonArrayDetails.nomePkLocal := aTabelaDetalhe.nomePKLocal;
                  Self.FDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
                end
                else
@@ -829,7 +880,7 @@ begin
                try
                  jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, Dict, aTabelaDetalhe.nomeParametro));
                  for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
-                   SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePK).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
+                   SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePKLocal).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
                finally
                  Dict.Free;
                end;
@@ -957,14 +1008,24 @@ begin
   Result := 0;
 end;
 
+function TDataIntegradorModuloWeb.GetNomePKLocal: string;
+begin
+  Result := Self.FnomePKLocal
+end;
+
+function TDataIntegradorModuloWeb.GetNomePlural: string;
+begin
+  Result := Self.FNomePlural
+end;
+
 function TDataIntegradorModuloWeb.getNomeSingular: string;
 begin
-  Result := Self.nomeSingular
+  Result := Self.FnomeSingular
 end;
 
 function TDataIntegradorModuloWeb.getNomeTabela: string;
 begin
-  Result := Self.nomeTabela
+  Result := Self.FNomeTabela
 end;
 
 procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
@@ -1224,7 +1285,7 @@ begin
              begin
                addTranslatedParams(aDataSet, params, tabelaDetalhe.translations, tabelaDetalhe.nomeParametro);
                for i := low(tabelaDetalhe.tabelasDetalhe) to high(tabelaDetalhe.tabelasDetalhe) do
-                 addTabelaDetalheParams(aDataSet.fieldByName(tabelaDetalhe.nomePK).AsInteger, params, tabelaDetalhe.tabelasDetalhe[i]);
+                 addTabelaDetalheParams(aDataSet.fieldByName(tabelaDetalhe.nomePKLocal).AsInteger, params, tabelaDetalhe.tabelasDetalhe[i]);
 
             end);
 end;
@@ -1406,6 +1467,7 @@ end;
 
 procedure TDataIntegradorModuloWeb.DataModuleCreate(Sender: TObject);
 begin
+  inherited;
   verbose := false;
   duasVias := false;
   clientToServer := false;
@@ -1536,12 +1598,12 @@ end;
 
 function TDataIntegradorModuloWeb.nomeSingularGet: string;
 begin
-  result := nomeSingular;
+  result := FnomeSingular;
 end;
 
 function TDataIntegradorModuloWeb.nomeSingularSave: string;
 begin
-  result := nomeSingular;
+  result := FnomeSingular;
 end;
 
 procedure TDataIntegradorModuloWeb.onDetailNamesMalformed(configName, tableName: string);
@@ -1573,6 +1635,26 @@ begin
     for i := 0 to High(Self.tabelasDetalhe) do
       TTabelaDetalhe(Self.tabelasDetalhe[i]).DmPrincipal := Value;
   end;
+end;
+
+procedure TDataIntegradorModuloWeb.setNomePKLocal(const Value: string);
+begin
+  Self.FnomePKLocal := Value;
+end;
+
+procedure TDataIntegradorModuloWeb.setNomePlural(const Value: string);
+begin
+  Self.FNomePlural := Value;
+end;
+
+procedure TDataIntegradorModuloWeb.SetNomeSingular(const Value: string);
+begin
+  Self.FNomeSingular := Value;
+end;
+
+procedure TDataIntegradorModuloWeb.setNomeTabela(const Value: string);
+begin
+  Self.FnomeTabela := Value;
 end;
 
 procedure TDataIntegradorModuloWeb.SetthreadControl(const Value: IThreadControl);
@@ -1612,7 +1694,7 @@ end;
 
 { TTabelaDetalhe }
 
-constructor TTabelaDetalhe.create;
+constructor TTabelaDetalhe.Create;
 begin
   translations := TTranslationSet.create(nil);
 end;
@@ -1633,33 +1715,6 @@ begin
   Result := FnomeParametro;
 end;
 
-function TTabelaDetalhe.GetNomePK: string;
-begin
-  Result := FnomePK;
-end;
-
-function TTabelaDetalhe.GetNomePluralDetalhe: string;
-begin
-  Result := FnomePluralDetalhe;
-end;
-
-function TTabelaDetalhe.GetNomeSingularDetalhe: string;
-begin
-  Result := FnomeSingularDetalhe;
-end;
-
-function TTabelaDetalhe.GetNomeTabela: string;
-begin
-  Result := FNomeTabela;
-end;
-
-procedure TTabelaDetalhe.setDmPrincipal(const Value: IDataPrincipal);
-begin
-  Self.FDm := Value;
-  if self.FFieldList = nil then
-    Self.FFieldList := TFieldDictionaryList.Create(Self.GetNomeTabela, Value);
-end;
-
 procedure TTabelaDetalhe.setNomeFK(const Value: string);
 begin
   FnomeFK := Value;
@@ -1668,26 +1723,6 @@ end;
 procedure TTabelaDetalhe.setNomeParametro(const Value: string);
 begin
   FnomeParametro := Value;
-end;
-
-procedure TTabelaDetalhe.setNomePK(const Value: string);
-begin
-  FnomePK := Value;
-end;
-
-procedure TTabelaDetalhe.setNomePluralDetalhe(const Value: string);
-begin
-  FnomePluralDetalhe := Value;
-end;
-
-procedure TTabelaDetalhe.setNomeSingularDetalhe(const Value: string);
-begin
-  FnomeSingularDetalhe := Value;
-end;
-
-procedure TTabelaDetalhe.setNomeTabela(const Value: string);
-begin
-  FNomeTabela := Value;
 end;
 
 { TJSONArrayContainer }

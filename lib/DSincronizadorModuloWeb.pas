@@ -341,10 +341,10 @@ begin
               Break;
             dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
             try
-              if (dmIntegrador.getNomeTabela <> EmptyStr) and (dmIntegrador.getNomeSingular <> EmptyStr) then
+              if (dmIntegrador.getNomeTabela <> EmptyStr) and (dmIntegrador.NomeSingular <> EmptyStr) then
               begin
                 if not lTranslateTableNames.ContainsKey(dmIntegrador.getNomeTabela) then
-                  lTranslateTableNames.Add(LowerCase(Trim(dmIntegrador.getNomeTabela)), LowerCase(Trim(dmIntegrador.getNomeSingular)));
+                  lTranslateTableNames.Add(LowerCase(Trim(dmIntegrador.getNomeTabela)), LowerCase(Trim(dmIntegrador.NomeSingular)));
               end;
 
               dmIntegrador.SetTranslateTableNames(lTranslateTableNames);
