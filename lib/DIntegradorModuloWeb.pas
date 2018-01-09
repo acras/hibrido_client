@@ -12,12 +12,12 @@ uses
   Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON, Data.DBXPlatform {$ENDIF} {$IFDEF VER300}, System.JSON {$ENDIF};
 
 type
-  TDatasetDictionary = class(TDictionary<String, String>)
+  TStringDictionary = class(TDictionary<String, String>)
   end;
 
-  TTranslateTableNames = class(TDictionary<String, String>)
+  TXMLNodeDictionary = class(TDictionary<string, IXMLDomNode>)
   end;
-
+  
   TFieldDictionary = class
   private
    FFieldName: string;
@@ -81,18 +81,24 @@ type
     nomeTabela: string;
     nomePkLocal: string;
     function getJsonArray: TJsonArray;
+    destructor Destroy; override;
+  end;
+
+  TDetailList = class(TDictionary<String, TJSONArrayContainer>)
+  public
+    destructor Destroy; override;
   end;
 
   TTabelaDetalhe = class;
 
   TDataIntegradorModuloWeb = class(TDataModule)
-    procedure DataModuleCreate(Sender: TObject);
   private
     FdmPrincipal: IDataPrincipal;
     Fnotifier: ISincronizacaoNotifier;
     FthreadControl: IThreadControl;
     FCustomParams: ICustomParams;
     FstopOnPostRecordError: boolean;
+    FStopOnGetRecordError : boolean;
     procedure addTabelaDetalheParams(valorPK: integer;
       params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
@@ -103,10 +109,9 @@ type
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
     function getFieldInsertList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
   protected
-    FDetailList: TDictionary<String, TJSONArrayContainer>;
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
-    FTranslateTableNames: TTranslateTableNames;
+    FTranslateTableNames: TStringDictionary;
     FnomeTabela: string;
     FnomeSingular: string;
     FNomePlural: string;
@@ -128,20 +133,20 @@ type
     procedure beforeRedirectRecord(idAntigo, idNovo: integer); virtual;
     function ultimaVersao: integer; virtual;
     function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string; virtual;
-    procedure importRecord(node: IXMLDomNode);
+    function importRecord(node: IXMLDomNode): boolean; virtual;
     procedure updateInsertRecord(node: IXMLDomNode; const id: integer);
     function jaExiste(const id: integer; const tableName, nomePk: string): boolean;
     function getFieldList(node: IXMLDomNode): string;
     function getFieldUpdateList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
     function getFieldValues(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
-    function translateFieldValue(node: IXMLDomNode): string; virtual;
+    function translateFieldValue(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string; virtual;
     function translateFieldNamePdvToServer(node: IXMLDomNode): string;
     function translateFieldNameServerToPdv(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string; virtual;
     function translateTypeValue(fieldType, fieldValue: string): string;
     function translateValueToServer(translation: TNameTranslation;
       fieldName: string; field: TField;
       nestedAttribute: string = ''; fkName: string = ''; fieldValue: String = ''): string; virtual;
-    function translateValueFromServer(fieldName, value: string): string; virtual;
+    function translateValueFromServer(fieldName, value: string; Integrador: TDataIntegradorModuloWeb): string; virtual;
     procedure redirectRecord(idAntigo, idNovo: integer);
     function getFieldAdditionalList(node: IXMLDomNode): string; virtual;
     function getFieldAdditionalValues(node: IXMLDomNode): string; virtual;
@@ -162,7 +167,6 @@ type
       params: TStringList;
       translations: TTranslationSet; nestedAttribute: string = ''): IXMLDomDocument2;
     function getAdditionalSaveConditions: string; virtual;
-    procedure beforeUpdateRecord(id: integer); virtual;
     function gerenciaRedirecionamentos(idLocal, idRemoto: integer): boolean; virtual;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
     function maxRecords: integer; virtual;
@@ -171,23 +175,23 @@ type
     function getAdditionalDetailFilter:String; virtual;
     function shouldContinue: boolean;
     procedure onDetailNamesMalformed(configName, tableName: string); virtual;
-    function getIncludeFieldNameOnList(const aDMLOperation: TDMLOperation; const aFieldName: string): boolean; virtual;
+    function getIncludeFieldNameOnList(const aDMLOperation: TDMLOperation; const aFieldName: string; Integrador: TDataIntegradorModuloWeb): boolean; virtual;
     function getObjectsList: string; virtual;
     function getUpdateStatement(node: IXMLDomNode; const id: integer): String; virtual;
     function getInsertStatement(node: IXMLDomNode): String; virtual;
     function getNewId(node: IXMLDomNode): Integer; virtual;
     function post(ds: TDataSet; http: TidHTTP; url: string): string; virtual;
-    procedure addDetailsToJsonList(aDs: TDataSet); virtual;
-    procedure SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe); virtual;
-    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aDict: TDatasetDictionary; aNestedAttribute: string = '') : TJsonObject; virtual;
-    procedure addMasterTableToJson(aDs: TDataSet; apStream: TStringStream); virtual;
+    procedure addDetailsToJsonList(aDetailList: TDetailList; aDs: TDataSet); virtual;
+    procedure SelectDetails(aDetailList: TDetailList; aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe); virtual;
+    function getJsonObject(aDs: TDataSet; aTranslations: TTranslationSet; aDict: TStringDictionary; aNestedAttribute: string = '') : TJsonObject; virtual;
+    procedure addMasterTableToJson(aDetailList: TDetailList; aDs: TDataSet; apStream: TStringStream); virtual;
     procedure RunDataSet(const aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe; aProc: TAnonymousMethod); virtual;
     function GetIdRemoto(aDoc: IXMLDomDocument2): integer;
     function getXMLContentAsXMLDom(const aXMLContent: string): IXMLDomDocument2;
     procedure SetdmPrincipal(const Value: IDataPrincipal); virtual;
     function getdmPrincipal: IDataPrincipal; virtual;
     function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
-    function DataSetToArray(aDs: TDataSet): TDatasetDictionary; virtual;
+    function DataSetToArray(aDs: TDataSet): TStringDictionary; virtual;
     procedure BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean); virtual;
     procedure ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb); virtual;
     function getTranslatedTable(const aServerName: string): TDataIntegradorModuloWeb; virtual;
@@ -197,6 +201,8 @@ type
     procedure setNomePlural(const Value: string); virtual;
     function GetNomePKLocal: string; virtual;
     procedure setNomePKLocal(const Value: string); virtual;
+    procedure SetQueryParameters(qry: TSQLDataSet; DMLOperation: TDMLOperation; node: IXMLDomNode; ChildrenNodes: TXMLNodeDictionary;
+      Integrador: TDataIntegradorModuloWeb); virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -205,6 +211,7 @@ type
     property CustomParams: ICustomParams read FCustomParams write FCustomParams;
     property dmPrincipal: IDataPrincipal read getdmPrincipal write SetdmPrincipal;
     property stopOnPostRecordError: boolean read FstopOnPostRecordError write FstopOnPostRecordError;
+    property stopOnGetRecordError: boolean read FStopOnGetRecordError write FstopOnGetRecordError;
     function buildRequestURL(nomeRecurso: string; params: string = ''; httpAction: THttpAction = haGet): string; virtual; abstract;
     procedure getDadosAtualizados(http: TIdHTTP = nil);
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
@@ -214,14 +221,16 @@ type
     procedure afterDadosAtualizados; virtual;
     function getHumanReadableName: string; virtual;
     property DataLog: ILog read FDataLog write SetDataLog;
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function getNomeTabela: string; virtual;
     procedure setNomeTabela(const Value: string); virtual;
-    procedure SetTranslateTableNames(aTranslateTableNames: TTranslateTableNames);
+    procedure SetTranslateTableNames(aTranslateTableNames: TStringDictionary);
     property nomeTabela: string read GetNomeTabela write setNomeTabela;
     property NomeSingular: string read getNomeSingular write SetNomeSingular;
     property nomePlural: string read GetNomePlural write setNomePlural;
     property nomePKLocal: string read GetNomePKLocal write setNomePKLocal;
+    function getFieldDictionaryList: TFieldDictionaryList;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -296,22 +305,29 @@ begin
     if trim(xmlContent) <> '' then
     begin
       doc := CoDOMDocument60.Create;
-      doc.loadXML(xmlContent);
-      list := doc.selectNodes(Self.getObjectsList);
-      numRegistros := list.length;
-      if notifier <> nil then
-        notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
-      for i := 0 to numRegistros-1 do
-      begin
-        if (not self.shouldContinue) then
-          Break;
-
+      try
+        doc.loadXML(xmlContent);
+        list := doc.selectNodes(Self.getObjectsList);
+        numRegistros := list.length;
         if notifier <> nil then
-          notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
-          '/' + IntToStr(numRegistros));
-        node := list.item[i];
-        if node<>nil then
-          importRecord(node);
+          notifier.setCustomMessage(IntToStr(numRegistros) + ' novos');
+        for i := 0 to numRegistros-1 do
+        begin
+          if (not self.shouldContinue) then
+            Break;
+
+          if notifier <> nil then
+            notifier.setCustomMessage('Importando ' + getHumanReadableName + ': ' + IntToStr(i+1) +
+            '/' + IntToStr(numRegistros));
+          node := list.item[i];
+          if node<>nil then
+          begin
+            if not importRecord(node) and Self.FStopOnGetRecordError then
+              Break;
+          end;
+        end;
+      finally
+        doc := nil;
       end;
     end;
     keepImporting := (maxRecords > 0) and (numRegistros >= maxRecords);
@@ -329,10 +345,11 @@ begin
   result := 0;
 end;
 
-procedure TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode);
+function TDataIntegradorModuloWeb.importRecord(node : IXMLDomNode): boolean;
 var
   id: integer;
 begin
+  Result := False;
   if not singleton then
   begin
     id := strToIntDef(node.selectSingleNode(dasherize(nomePKRemoto)).text, -1);
@@ -342,6 +359,7 @@ begin
       try
         Self.updateInsertRecord(node, id);
         dmPrincipal.commit;
+        Result := True;
       except
         on E:Exception do
         begin
@@ -350,7 +368,6 @@ begin
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
           Self.log(e.Message);
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
-          //raise; //??
         end;
       end;
     end;
@@ -380,11 +397,6 @@ begin
   else
     qry := 'SELECT count(1) FROM ' + tableName + ' where ' + nomePK + ' = ' + IntToStr(id);
   result := dmPrincipal.getSQLIntegerResult(qry) > 0;
-end;
-
-procedure TDataIntegradorModuloWeb.beforeUpdateRecord(id: integer);
-begin
-
 end;
 
 function TDataIntegradorModuloWeb.getUpdateStatement(node: IXMLDomNode; const id: integer): String;
@@ -418,6 +430,75 @@ begin
     end;
 end;
 
+procedure TDataIntegradorModuloWeb.SetQueryParameters(qry: TSQLDataSet; DMLOperation: TDMLOperation; node: IXMLDomNode;  ChildrenNodes: TXMLNodeDictionary;  Integrador: TDataIntegradorModuloWeb);
+var
+  i: integer;
+  ValorCampo: string;
+  Field: TFieldDictionary;
+  lFormatSettings: TFormatSettings;
+  BlobStream: TStringStream;
+begin
+  //Preenche os Parametros
+  for i := 0 to node.childNodes.length - 1 do
+  begin
+    if (node.childNodes[i].attributes.getNamedItem('type') <> nil) and (node.childNodes[i].attributes.getNamedItem('type').text = 'array') then
+    begin
+      if not ChildrenNodes.ContainsKey(node.childNodes[i].nodeName) then
+        ChildrenNodes.Add(node.childNodes[i].nodeName, node.childNodes[i]);
+    end;
+
+    name := LowerCase(translateFieldNameServerToPdv(node.childNodes.item[i], Integrador));
+    ValorCampo := translateFieldValue(node.childNodes.item[i], Integrador);
+    if name <> '*' then
+      if Self.getIncludeFieldNameOnList(DMLOperation, name, Integrador) then
+      begin
+        if ValorCampo = 'NULL' then
+        begin
+          qry.ParamByName(name).Value := unassigned;
+          qry.ParamByName(name).DataType := ftString;
+        end
+        else
+        begin
+          Field := nil;
+          if Integrador.FFieldList <> nil then
+            Field := Integrador.FFieldList.Items[Lowercase(name)];
+          if Field <> nil then
+          begin
+            case Field.DataType of
+              ftString: qry.ParamByName(name).AsString := ValorCampo;
+              ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
+              ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+              ftDateTime, ftTimeStamp:
+                begin
+                  ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                  ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
+                  lFormatSettings.DateSeparator := '/';
+                  lFormatSettings.TimeSeparator := ':';
+                  lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
+                  qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
+                end;
+              ftCurrency:
+                begin
+                  ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
+                  qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
+                end;
+              ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
+              ftBlob: begin
+                        BlobStream := TStringStream.Create(ValorCampo, TEncoding.UTF8);
+                        try
+                          qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
+                        finally
+                          FreeAndNil(BlobStream);
+                        end;
+              end
+            else
+              qry.ParamByName(name).AsString := ValorCampo;
+            end;
+          end;
+        end;
+      end;
+  end;
+end;
 
 procedure TDataIntegradorModuloWeb.ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb);
 var
@@ -425,14 +506,10 @@ var
   name: string;
   qry: TSQLDataSet;
   FieldsListUpdate, FieldsListInsert : string;
-  ValorCampo: string;
-  BlobStream: TStringStream;
   Paramlog, vLog: string;
-  lFormatSettings: TFormatSettings;
   Existe: Boolean;
-  Field: TFieldDictionary;
   NewId: integer;
-  ChildrenNodes: TDictionary<string, IXMLDomNode>;
+  ChildrenNodes: TXMLNodeDictionary;
   ChildNode: TPair<string, IXMLDomNode>;
   ChildId: integer;
   handled : boolean;
@@ -440,97 +517,47 @@ var
   numRegistros: integer;
   nodeItem : IXMLDomNode;
   Detail: TDataIntegradorModuloWeb;
+  DMLOperation: TDMLOperation;
+  StrCheckInsert: TStringList;
 begin
   Existe := jaExiste(id, Integrador.nomeTabela, Integrador.nomePKLocal);
   qry := dmPrincipal.getQuery;
-  ChildrenNodes := TDictionary<string, IXMLDomNode>.Create;
+  ChildrenNodes := TXMLNodeDictionary.Create;
   try
     if Existe then
     begin
-      FieldsListUpdate := self.getFieldUpdateList(node, Integrador);
+      DMLOperation := dmUpdate;
+      FieldsListUpdate := Self.getFieldUpdateList(node, Integrador);
       qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET ' + FieldsListUpdate;
       if DuasVias then
         qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
       else
-        qry.CommandText := qry.CommandText + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
+        qry.CommandText := qry.CommandText + ' WHERE ' + Integrador.nomePKLocal + ' = ' + IntToStr(id);
     end
     else
     begin
+      DMLOperation := dmInsert;
       FieldsListInsert := self.getFieldInsertList(node, Integrador);
-      NewId := Self.getNewId(Node);
+      NewId := Integrador.getNewId(Node);
       if NewId > 0 then
       begin
-        if Pos(':'+Self.nomePKLocal +',', FieldsListInsert) = 0 then
-          FieldsListInsert := ':'+ Self.nomePKLocal + ',' + FieldsListInsert;
+        StrCheckInsert := TStringList.Create;
+        try
+          StrCheckInsert.Delimiter := ':';
+          StrCheckInsert.DelimitedText := FieldsListInsert;
+          if StrCheckInsert.IndexOf(Integrador.nomePKLocal) < 0 then
+            FieldsListInsert := ':'+ Integrador.nomePKLocal + ',' + FieldsListInsert;
+        finally
+          StrCheckInsert.Free;
+        end;
       end;
       qry.CommandText := 'INSERT INTO ' + Integrador.nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
-      if qry.Params.ParamByName(Self.nomePkLocal) <> nil then
-        qry.ParamByName(Self.nomePkLocal).AsInteger := NewId;
+      if qry.Params.ParamByName(Integrador.nomePkLocal) <> nil then
+        qry.ParamByName(Integrador.nomePkLocal).AsInteger := NewId;
     end;
 
-    //Preenche os Parametros
-    for i := 0 to node.childNodes.length - 1 do
-    begin
-      if (node.childNodes[i].attributes.getNamedItem('type') <> nil) and (node.childNodes[i].attributes.getNamedItem('type').text = 'array') then
-      begin
-        if not ChildrenNodes.ContainsKey(node.childNodes[i].nodeName) then
-          ChildrenNodes.Add(node.childNodes[i].nodeName, node.childNodes[i]);
-      end;
+    Self.SetQueryParameters(qry, DMLOperation, node, ChildrenNodes, Integrador);
 
-      name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
-      ValorCampo := translateFieldValue(node.childNodes.item[i]);
-      if name <> '*' then
-        if Self.getIncludeFieldNameOnList(dmUpdate, name) then
-        begin
-          if ValorCampo = 'NULL' then
-          begin
-            qry.ParamByName(name).Value := unassigned;
-            qry.ParamByName(name).DataType := ftString;
-          end
-          else
-          begin
-            Field := nil;
-            if Self.FFieldList <> nil then
-              Field := Self.FFieldList.Items[Lowercase(name)];
-            if Field <> nil then
-            begin
-              case Field.DataType of
-                ftString: qry.ParamByName(name).AsString := ValorCampo;
-                ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
-                ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
-                ftDateTime, ftTimeStamp:
-                  begin
-                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                    ValorCampo := Trim(StringReplace(ValorCampo, '.','/', [rfReplaceAll]));
-                    lFormatSettings.DateSeparator := '/';
-                    lFormatSettings.TimeSeparator := ':';
-                    lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
-                    qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
-                  end;
-                ftCurrency:
-                  begin
-                    ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
-                    qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
-                  end;
-                ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
-                ftBlob: begin
-                          BlobStream := TStringStream.Create(ValorCampo);
-                          try
-                            qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
-                          finally
-                            FreeAndNil(BlobStream);
-                          end;
-                end
-              else
-                qry.ParamByName(name).AsString := ValorCampo;
-              end;
-            end;
-          end;
-        end;
-    end;
-
-    if Existe then
-      beforeUpdateRecord(id);
     try
       qry.ExecSQL;
     except
@@ -657,7 +684,7 @@ begin
   begin
     name := translateFieldNameServerToPdv(node.childNodes.item[i], Self);
     if name <> '*' then
-      if Self.getIncludeFieldNameOnList(dmInsert, name) then
+      if Self.getIncludeFieldNameOnList(dmInsert, name, Self) then
         result := result + name + ', ';
   end;
   result := copy(result, 0, length(result)-2);
@@ -684,8 +711,8 @@ begin
   begin
     name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
     if name <> '*' then
-      if Self.getIncludeFieldNameOnList(dmInsert, name) then
-        result := result + translateFieldValue(node.childNodes.item[i]) + ', ';
+      if Self.getIncludeFieldNameOnList(dmInsert, name, Integrador) then
+        result := result + translateFieldValue(node.childNodes.item[i], Integrador) + ', ';
   end;
   result := copy(result, 0, length(result)-2);
   result := result + getFieldAdditionalValues(node);
@@ -702,7 +729,7 @@ begin
   begin
     name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
     if name <> '*' then
-      if Self.getIncludeFieldNameOnList(dmUpdate, name) then
+      if Self.getIncludeFieldNameOnList(dmUpdate, name, Integrador) then
         result := result + ' ' + name + ' = :' + name + ',';
   end;
   //Remove a ultima virgula
@@ -714,19 +741,33 @@ function TDataIntegradorModuloWeb.getFieldInsertList(node: IXMLDomNode; Integrad
 var
   i: integer;
   name: string;
+  StrInsert: TStringList;
 begin
   Result := '';
-  for i := 0 to node.childNodes.length - 1 do
-  begin
-    name := translateFieldNameServerToPdv(node.childNodes.item[i], Integrador);
-    if name <> '*' then
-      if Self.getIncludeFieldNameOnList(dmInsert, name) then
-        Result := Result + ' :' + name + ',';
+  StrInsert := TStringList.Create;
+  try
+    for i := 0 to node.childNodes.length - 1 do
+    begin
+      name := LowerCase(translateFieldNameServerToPdv(node.childNodes.item[i], Integrador));
+      if name <> '*' then
+        if Self.getIncludeFieldNameOnList(dmInsert, name, Integrador) and (StrInsert.IndexOf(name) < 0) then
+        begin
+          StrInsert.Add(name);
+          Result := Result + ' :' + name + ',';
+        end;
+    end;
+    Result := copy(Result, 1, Length(Result)-1);
+  finally
+    StrInsert.Free;
   end;
-  Result := copy(Result, 1, Length(Result)-1);
 end;
 
-function TDataIntegradorModuloWeb.getIncludeFieldNameOnList(const aDMLOperation: TDMLOperation; const aFieldName: string): boolean;
+function TDataIntegradorModuloWeb.getFieldDictionaryList: TFieldDictionaryList;
+begin
+  Result := FFieldList;
+end;
+
+function TDataIntegradorModuloWeb.getIncludeFieldNameOnList(const aDMLOperation: TDMLOperation; const aFieldName: string; Integrador: TDataIntegradorModuloWeb): boolean;
 begin
   Result := True;
 end;
@@ -760,8 +801,7 @@ begin
   Result := 'versao';
 end;
 
-function TDataIntegradorModuloWeb.translateFieldValue(
-  node: IXMLDomNode): string;
+function TDataIntegradorModuloWeb.translateFieldValue(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
 var
   typedTranslate: string;
 begin
@@ -770,10 +810,10 @@ begin
   else if (node.attributes.getNamedItem('type') <> nil) then
   begin
     typedTranslate := translateTypeValue(node.attributes.getNamedItem('type').text, node.text);
-    result := translateValueFromServer(node.nodeName, typedTranslate);
+    result := translateValueFromServer(node.nodeName, typedTranslate, Integrador);
   end
   else
-    result := translateValueFromServer(node.nodeName, node.text);
+    result := translateValueFromServer(node.nodeName, node.text, Integrador);
 end;
 
 function TDataIntegradorModuloWeb.translateTypeValue(fieldType, fieldValue: string): string;
@@ -847,15 +887,15 @@ begin
     Abort;
 end;
 
-procedure TDataIntegradorModuloWeb.addDetailsToJsonList(aDs: TDataSet);
+procedure TDataIntegradorModuloWeb.addDetailsToJsonList(aDetailList: TDetailList; aDs: TDataSet);
 var
   i : integer;
 begin
   for i := low(Self.tabelasDetalhe) to high(Self.tabelasDetalhe) do
-    Self.SelectDetails(aDs.fieldByName(nomePKLocal).AsInteger, Self.tabelasDetalhe[i]);
+    Self.SelectDetails(aDetailList, aDs.fieldByName(nomePKLocal).AsInteger, Self.tabelasDetalhe[i]);
 end;
 
-procedure TDataIntegradorModuloWeb.SelectDetails(aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe);
+procedure TDataIntegradorModuloWeb.SelectDetails(aDetailList: TDetailList; aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe);
 var
   jsonArrayDetails: TJSONArrayContainer;
 begin
@@ -863,24 +903,24 @@ begin
              procedure (aDataSet: TDataSet)
              var
                i: integer;
-               Dict: TDataSetDictionary;
+               Dict: TStringDictionary;
              begin
-               if not Self.FDetailList.ContainsKey(aTabelaDetalhe.nomeParametro) then
+               if not aDetailList.ContainsKey(aTabelaDetalhe.nomeParametro) then
                begin
                  jsonArrayDetails := TJSONArrayContainer.Create;
                  jsonArrayDetails.nomePluralDetalhe := aTabelaDetalhe.nomePlural;
                  jsonArrayDetails.nomeSingularDetalhe := aTabelaDetalhe.FnomeSingular;
                  jsonArrayDetails.nomeTabela := aTabelaDetalhe.nomeTabela;
                  jsonArrayDetails.nomePkLocal := aTabelaDetalhe.nomePKLocal;
-                 Self.FDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
+                 aDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
                end
                else
-                 jsonArrayDetails := Self.FDetailList.Items[aTabelaDetalhe.nomeParametro];
+                 jsonArrayDetails := aDetailList.Items[aTabelaDetalhe.nomeParametro];
                Dict := Self.DataSetToArray(aDataSet);
                try
                  jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, Dict, aTabelaDetalhe.nomeParametro));
                  for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
-                   SelectDetails(aDataSet.fieldByName(aTabelaDetalhe.nomePKLocal).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
+                   SelectDetails(aDetailList, aDataSet.fieldByName(aTabelaDetalhe.nomePKLocal).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
                finally
                  Dict.Free;
                end;
@@ -930,7 +970,7 @@ begin
   end;
 end;
 
-function TDataIntegradorModuloWeb.DataSetToArray(aDs: TDataSet) : TDatasetDictionary;
+function TDataIntegradorModuloWeb.DataSetToArray(aDs: TDataSet) : TStringDictionary;
 var
   i: Integer;
   nome: String;
@@ -939,18 +979,15 @@ var
   BlobStream: TStringStream;
   FieldStream: TStream;
 begin
-  Result := TDatasetDictionary.Create;
+  Result := TStringDictionary.Create;
   for I := 0 to aDs.FieldCount - 1 do
   begin
     nome := aDs.Fields[i].FieldName;
-
     try
-    begin
       if VarIsNull(aDs.Fields[i].AsVariant) then
         fieldValue := ''
       else
         fieldValue := aDs.Fields[i].AsVariant;
-    end;
     except
       fieldValue := aDs.Fields[i].AsString;
     end;
@@ -961,8 +998,8 @@ begin
       Value := aDS.Fields[i].AsString
     else if aDs.Fields[i].DataType = ftBlob then
     begin
+      BlobStream := TStringStream.Create('', TEncoding.UTF8);
       try
-        BlobStream := TStringStream.Create;
         FieldStream := aDs.CreateBlobStream(aDs.Fields[i], bmRead);
         BlobStream.LoadFromStream(FieldStream);
         value := BlobStream.DataString;
@@ -978,12 +1015,13 @@ begin
 end;
 
 function TDataIntegradorModuloWeb.getJsonObject(aDs: TDataSet;
- aTranslations: TTranslationSet; aDict: TDatasetDictionary; aNestedAttribute: string = ''): TJsonObject;
+ aTranslations: TTranslationSet; aDict: TStringDictionary; aNestedAttribute: string = ''): TJsonObject;
 var
   i: integer;
   nomeCampo, nome, valor, fieldValue: string;
 begin
   Result := TJsonObject.Create;
+  Result.Owned := False;
   for i := 0 to aTranslations.size-1 do
   begin
     nomeCampo := aTranslations.get(i).pdv;
@@ -1028,11 +1066,11 @@ begin
   Result := Self.FNomeTabela
 end;
 
-procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDs: TDataSet; apStream: TStringStream);
+procedure TDataIntegradorModuloWeb.addMasterTableToJson(aDetailList: TDetailList; aDs: TDataSet; apStream: TStringStream);
 var
   JMaster, JResponse: TJsonObject;
   Item: TPair<string, TJSONArrayContainer>;
-  Dict: TDatasetDictionary;
+  Dict: TStringDictionary;
 begin
   Dict := Self.DataSetToArray(aDs);
   try
@@ -1040,7 +1078,7 @@ begin
     JResponse := TJSONObject.Create;
     try
       jResponse.AddPair(Self.nomeSingularSave, JMaster);
-      for Item in Self.FDetailList do
+      for Item in aDetailList do
         JMaster.AddPair(item.Key, Item.Value.getJsonArray);
       apStream.WriteString(JResponse.ToString);
     finally
@@ -1055,6 +1093,7 @@ function TDataIntegradorModuloWeb.post(ds: TDataSet; http: TidHTTP; url: string)
 var
   params: TStringList;
   pStream: TStringStream;
+  DetailList: TDetailList;
 begin
   result := '';
   if paramsType = ptParam then
@@ -1069,15 +1108,17 @@ begin
       params.Free;
     end;
   end;
- if paramsType = ptJSON then
+  if paramsType = ptJSON then
   begin
     pStream := TStringStream.Create('', TEncoding.UTF8);
+    DetailList := TDetailList.Create;
     try
-      Self.addDetailsToJsonList(ds);
-      Self.addMasterTableToJson(ds, pStream);
+      Self.addDetailsToJsonList(DetailList, ds);
+      Self.addMasterTableToJson(DetailList, ds, pStream);
       result := http.Post(url, pStream);
     finally
       pStream.Free;
+      DetailList.Free;
     end;
   end;
 end;
@@ -1115,7 +1156,6 @@ begin
   end;
 end;
 
-                                                
 function TDataIntegradorModuloWeb.saveRecordToRemote(ds: TDataSet;
   var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
 var
@@ -1152,12 +1192,13 @@ begin
         if useMultipartParams then
         begin
           multiPartParams := TIdMultiPartFormDataStream.Create;
+          stream := TStringStream.Create('',TEncoding.UTF8);
           try
-            stream := TStringStream.Create('');
             prepareMultipartParams(ds, multipartParams );
             http.Post(getRequestUrlForAction(true, -1), multipartParams, stream);
             xmlContent := stream.ToString;
           finally
+            Stream.Free;
             MultipartParams.Free;
           end;
         end
@@ -1187,8 +1228,16 @@ begin
           if not gerenciaRedirecionamentos(ds.fieldByName(nomePKLocal).AsInteger, idRemoto) then
           begin
             dmPrincipal.startTransaction;
-            dmPrincipal.execSQL(txtUpdate);
-            dmPrincipal.commit;
+            try
+              dmPrincipal.execSQL(txtUpdate);
+              dmPrincipal.commit;
+            except
+              on E: Exception do
+              begin
+                dmPrincipal.rollback;
+                raise;
+              end;
+            end;
           end;
 
           if (Length(TabelasDetalhe) > 0) and (Result.selectSingleNode(dasherize(nomeSingularSave)) <> nil) then
@@ -1350,12 +1399,11 @@ begin
           notifier.setCustomMessage('Salvando ' + getHumanReadableName +
             ' ' + IntToStr(n) + '/' + IntToStr(total));
         end;
-        inc(n);
-
         try
           saveRecordToRemote(qry, salvou, http);
           if salvou then
             Self.Log(Format('Registro %d de %d', [n, total]));
+          inc(n);
         except
           on e: Exception do
           begin
@@ -1465,9 +1513,9 @@ begin
       end;
 end;
 
-procedure TDataIntegradorModuloWeb.DataModuleCreate(Sender: TObject);
+constructor TDataIntegradorModuloWeb.Create(AOwner: TComponent);
 begin
-  inherited;
+  inherited Create(AOwner);
   verbose := false;
   duasVias := false;
   clientToServer := false;
@@ -1480,7 +1528,7 @@ begin
   useMultipartParams := false;
   paramsType := ptParam;
   FstopOnPostRecordError := true;
-  Self.FDetailList := TDictionary<String, TJSONArrayContainer>.Create;
+  FStopOnGetRecordError := False;
   Self.encodeJsonValues := False;
   translations.add('id', 'idremoto');
 end;
@@ -1489,13 +1537,9 @@ end;
 destructor TDataIntegradorModuloWeb.Destroy;
 var
   i: integer;
-  Item: TPair<string, TJSONArrayContainer>;
 begin
   for i := Low(Self.tabelasDetalhe) to High(Self.tabelasDetalhe) do
      Self.tabelasDetalhe[i].Free;
-  for Item in Self.FDetailList do
-    Item.Value.Free;
-  Self.FDetailList.Free;
   if Self.FFieldList <> nil then
     Self.FFieldList.Free;
   inherited;
@@ -1562,8 +1606,7 @@ begin
   Result := 'dd"/"mm"/"yyyy"T"hh":"nn":"ss'
 end;
 
-function TDataIntegradorModuloWeb.translateValueFromServer(fieldName,
-  value: string): string;
+function TDataIntegradorModuloWeb.translateValueFromServer(fieldName, value: string; Integrador: TDataIntegradorModuloWeb): string;
 begin
   result := value;
 end;
@@ -1662,7 +1705,7 @@ begin
   FthreadControl := Value;
 end;
 
-procedure TDataIntegradorModuloWeb.SetTranslateTableNames(aTranslateTableNames: TTranslateTableNames);
+procedure TDataIntegradorModuloWeb.SetTranslateTableNames(aTranslateTableNames: TStringDictionary);
 begin
   Self.FTranslateTableNames := aTranslateTableNames;
 end;
@@ -1696,12 +1739,12 @@ end;
 
 constructor TTabelaDetalhe.Create;
 begin
+  inherited;
   translations := TTranslationSet.create(nil);
 end;
 
 destructor TTabelaDetalhe.Destroy;
 begin
-  Self.FFieldList.Free;
   inherited;
 end;
 
@@ -1726,6 +1769,11 @@ begin
 end;
 
 { TJSONArrayContainer }
+
+destructor TJSONArrayContainer.Destroy;
+begin
+  inherited;
+end;
 
 function TJSONArrayContainer.getJsonArray: TJsonArray;
 begin
@@ -1848,5 +1896,21 @@ begin
   FFieldName := Trim(Value);
 end;
 
+
+{ TDetailList }
+
+destructor TDetailList.Destroy;
+var
+  Pair: TPair<String, TJSONArrayContainer>;
+  Json: TJsonValue;
+begin
+  for Pair in Self do
+  begin
+    for Json in Pair.Value.getJsonArray do
+      Json.Free;
+    Pair.Value.Free;
+  end;
+  inherited;
+end;
 
 end.

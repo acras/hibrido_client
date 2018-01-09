@@ -179,7 +179,7 @@ begin
       end;
     finally
       dm := nil;
-      http := nil;
+      FreeAndNil(http);
     end;
   finally
     CoUninitialize;
@@ -318,7 +318,7 @@ var
   dm: IDataPrincipal;
   dmIntegrador: TDataIntegradorModuloWeb;
   http: TIdHTTP;
-  lTranslateTableNames: TTranslateTableNames;
+  lTranslateTableNames: TStringDictionary;
 begin
   inherited;
   if salvandoRetaguarda or gravandoVenda then exit;
@@ -334,7 +334,7 @@ begin
       try
         try
           http := getHTTPInstance;
-          lTranslateTableNames := TTranslateTableNames.Create;
+          lTranslateTableNames := TStringDictionary.Create;
           for i := 0 to length(sincronizador.posterDataModules)-1 do
           begin
             if not Self.ShouldContinue then
