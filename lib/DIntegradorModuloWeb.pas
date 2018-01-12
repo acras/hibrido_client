@@ -1020,6 +1020,7 @@ function TDataIntegradorModuloWeb.getJsonObject(aDs: TDataSet;
 var
   i: integer;
   nomeCampo, nome, valor, fieldValue: string;
+  StringUTF8: UTF8String;
 begin
   Result := TJsonObject.Create;
   Result.Owned := False;
@@ -1034,10 +1035,14 @@ begin
       valor :=  translateValueToServer(aTranslations.get(i), aTranslations.get(i).pdv,
           aDs.fieldByName(aTranslations.get(i).pdv), aNestedAttribute, aTranslations.get(i).fkName, fieldValue);
       if not JsonObjectHasPair(nome, Result) then
+      begin
+        StringUTF8 := Trim(valor);
         if Self.encodeJsonValues then
-          Result.AddPair(nome,  EncodeString(Trim(valor)))
+
+          Result.AddPair(nome, EncodeBase64(PAnsiChar(StringUTF8), Length(StringUTF8)))
         else
           Result.AddPair(nome, valor);
+      end;
     end;
   end;
 end;
