@@ -108,6 +108,7 @@ type
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
     function getFieldInsertList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
+    function BinaryFromBase64(const base64: string): TBytesStream;
   protected
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
@@ -255,7 +256,7 @@ var
   DataIntegradorModuloWeb: TDataIntegradorModuloWeb;
 implementation
 
-uses AguardeFormUn, ComObj;
+uses AguardeFormUn, ComObj, idCoderMIME, IdGlobal;
 
 {$R *.dfm}
 
@@ -482,14 +483,17 @@ begin
                   ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
                   qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
                 end;
-              ftFloat: qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
-              ftBlob: begin
-                        BlobStream := TStringStream.Create(ValorCampo, TEncoding.UTF8);
-                        try
-                          qry.ParamByName(name).LoadFromStream(BlobStream, ftMemo);
-                        finally
-                          FreeAndNil(BlobStream);
-                        end;
+              ftFloat:
+              begin
+                qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
+              end;
+              ftBlob:
+              begin
+                try
+                  qry.ParamByName(name).LoadFromStream(self.BinaryFromBase64(ValorCampo), ftBlob);
+                finally
+                  FreeAndNil(BlobStream);
+                end;
               end
             else
               qry.ParamByName(name).AsString := ValorCampo;
@@ -978,6 +982,7 @@ var
   fieldValue: string;
   BlobStream: TStringStream;
   FieldStream: TStream;
+  Input: TMemoryStream;
 begin
   Result := TStringDictionary.Create;
   for I := 0 to aDs.FieldCount - 1 do
@@ -998,13 +1003,17 @@ begin
       Value := aDS.Fields[i].AsString
     else if aDs.Fields[i].DataType = ftBlob then
     begin
-      BlobStream := TStringStream.Create('', TEncoding.UTF8);
       try
         FieldStream := aDs.CreateBlobStream(aDs.Fields[i], bmRead);
-        BlobStream.LoadFromStream(FieldStream);
-        value := BlobStream.DataString;
+        Input := TBytesStream.Create;
+        try
+          Input.LoadFromStream(FieldStream);
+          Input.Position := 0;
+          Value := TIdEncoderMIME.EncodeStream(Input);
+        finally
+          FreeAndNil(Input);
+        end;
       Finally
-        FreeAndNil(BlobStream);
         FreeAndNil(FieldStream);
       end;
     end
@@ -1037,8 +1046,12 @@ begin
       begin
         StringUTF8 := Trim(valor);
         if Self.encodeJsonValues then
-
-          Result.AddPair(nome, EncodeBase64(PAnsiChar(StringUTF8), Length(StringUTF8)))
+        begin
+          if aDs.fieldByName(aTranslations.get(i).pdv).DataType = ftblob then
+            Result.AddPair(nome, valor)
+          else
+            Result.AddPair(nome, TIdEncoderMIME.EncodeString(StringUTF8, IndyTextEncoding_UTF8))
+        end
         else
           Result.AddPair(nome, valor);
       end;
@@ -1738,6 +1751,32 @@ function TDataIntegradorModuloWeb.gerenciaRedirecionamentos(idLocal,
   idRemoto: integer): boolean;
 begin
   result := false;
+end;
+
+function TDataIntegradorModuloWeb.BinaryFromBase64(const base64: string): TBytesStream;
+var
+  Input: TStringStream;
+  Output: TBytesStream;
+begin
+  Input := TStringStream.Create(base64, TEncoding.ASCII);
+  try
+    Output := TBytesStream.Create;
+    try
+      Soap.EncdDecd.DecodeStream(Input, Output);
+      Output.Position := 0;
+      Result := TBytesStream.Create;
+      try
+        Result.LoadFromStream(Output);
+      except
+        Result.Free;
+        raise;
+      end;
+    finally
+      Output.Free;
+    end;
+  finally
+    Input.Free;
+  end;
 end;
 
 { TTabelaDetalhe }
