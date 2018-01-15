@@ -1128,7 +1128,7 @@ begin
     try
       Self.addDetailsToJsonList(DetailList, ds);
       Self.addMasterTableToJson(DetailList, ds, pStream);
-      //result := http.Post(url, pStream);
+      result := http.Post(url, pStream);
     finally
       pStream.Free;
       DetailList.Free;
