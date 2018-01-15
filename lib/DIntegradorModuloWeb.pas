@@ -434,17 +434,16 @@ end;
 procedure TDataIntegradorModuloWeb.SetQueryParameters(qry: TSQLDataSet; DMLOperation: TDMLOperation; node: IXMLDomNode;  ChildrenNodes: TXMLNodeDictionary;  Integrador: TDataIntegradorModuloWeb);
 var
   i: integer;
-  ValorCampo: string;
+  ValorCampo: UTF8String;
   Field: TFieldDictionary;
   lFormatSettings: TFormatSettings;
-  BlobStream: TStringStream;
 begin
   //Preenche os Parametros
   for i := 0 to node.childNodes.length - 1 do
   begin
     if (node.childNodes[i].attributes.getNamedItem('type') <> nil) and (node.childNodes[i].attributes.getNamedItem('type').text = 'array') then
     begin
-      if not ChildrenNodes.ContainsKey(node.childNodes[i].nodeName) then
+      if (ChildrenNodes <> nil) and (not ChildrenNodes.ContainsKey(node.childNodes[i].nodeName)) then
         ChildrenNodes.Add(node.childNodes[i].nodeName, node.childNodes[i]);
     end;
 
@@ -466,9 +465,9 @@ begin
           if Field <> nil then
           begin
             case Field.DataType of
-              ftString: qry.ParamByName(name).AsString := ValorCampo;
+              ftString, ftMemo: qry.ParamByName(name).AsString := ValorCampo;
               ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
-              ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+              ftLargeint, ftFMTBcd, ftSingle: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
               ftDateTime, ftTimeStamp:
                 begin
                   ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
@@ -478,7 +477,7 @@ begin
                   lFormatSettings.ShortDateFormat := 'dd/MM/yyyy hh:mm:ss';
                   qry.ParamByName(name).AsDateTime := StrToDateTime(ValorCampo, lFormatSettings);
                 end;
-              ftCurrency:
+              ftCurrency, ftTime:
                 begin
                   ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
                   qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
@@ -489,11 +488,7 @@ begin
               end;
               ftBlob:
               begin
-                try
-                  qry.ParamByName(name).LoadFromStream(self.BinaryFromBase64(ValorCampo), ftBlob);
-                finally
-                  FreeAndNil(BlobStream);
-                end;
+                qry.ParamByName(name).LoadFromStream(self.BinaryFromBase64(ValorCampo), ftBlob);
               end
             else
               qry.ParamByName(name).AsString := ValorCampo;
@@ -1133,7 +1128,7 @@ begin
     try
       Self.addDetailsToJsonList(DetailList, ds);
       Self.addMasterTableToJson(DetailList, ds, pStream);
-      result := http.Post(url, pStream);
+      //result := http.Post(url, pStream);
     finally
       pStream.Free;
       DetailList.Free;
@@ -1856,6 +1851,7 @@ begin
     lqry := FDm.getQuery;
     try
       Self.FTableName := UpperCase(Self.FTableName);
+
       lqry.CommandText :=
         '  SELECT ' +
         '    A.RDB$FIELD_NAME FieldName,' +
@@ -1896,10 +1892,15 @@ begin
                 if lqry.FieldByName('SUBTIPO').asInteger = 0 then
                   lFieldType := ftInteger
                 else
-                  lFieldType := ftCurrency;
+                  lFieldType := ftFMTBcd;
               end;
             10: //Float
-              lFieldType := ftFloat;
+              begin
+                if lqry.FieldByName('SUBTIPO').asInteger = 0 then
+                  lFieldType := ftSingle
+                else
+                  lFieldType := ftFloat;
+              end;
             12: //Date
               lFieldType := ftDate;
             13: //Time
@@ -1912,13 +1913,21 @@ begin
                   lFieldType := ftCurrency;
               end;
             27: //double
-              lFieldType := ftCurrency;
+              begin
+                if lqry.FieldByName('SUBTIPO').asInteger = 0 then
+                  lFieldType := ftFloat
+                else
+                  lFieldType := ftCurrency;
+              end;
             35: //timestamp
               lFieldType := ftTimeStamp;
             14, 37: //varchar
               lFieldType := ftString;
             261: //blob
-              lFieldType := ftBlob
+              if lqry.FieldByName('SUBTIPO').asInteger = 0 then
+                lFieldType := ftBlob
+              else
+                lFieldType := ftMemo;
             else
               lFieldType := ftUnknown;
           end;
@@ -1927,6 +1936,7 @@ begin
         end;
         lqry.Next;
       end;
+
     finally
       lqry.Free;
     end;
