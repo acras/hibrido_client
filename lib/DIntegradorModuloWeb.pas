@@ -467,7 +467,7 @@ begin
             case Field.DataType of
               ftString, ftMemo: qry.ParamByName(name).AsString := ValorCampo;
               ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
-              ftLargeint, ftFMTBcd, ftSingle: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+              ftLargeint, ftSingle: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
               ftDateTime, ftTimeStamp:
                 begin
                   ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
@@ -482,7 +482,7 @@ begin
                   ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
                   qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
                 end;
-              ftFloat:
+              ftFloat, ftFMTBcd:
               begin
                 qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
               end;
