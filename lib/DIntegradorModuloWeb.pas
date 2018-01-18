@@ -291,7 +291,7 @@ begin
       notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
     numRegistros := 0;
 
-    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_BLUE OR 4 ); //);
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_BLUE OR 4 OR FOREGROUND_INTENSITY ); //);
     writeln('URL: ' + url);
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
     xmlContent := getRemoteXmlContent(url, http, erro);
@@ -467,7 +467,7 @@ begin
             case Field.DataType of
               ftString, ftMemo: qry.ParamByName(name).AsString := ValorCampo;
               ftInteger: qry.ParamByName(name).AsInteger := StrToInt(ValorCampo);
-              ftLargeint, ftSingle: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
+              ftLargeint: qry.ParamByName(name).AsLargeInt := StrToInt(ValorCampo);
               ftDateTime, ftTimeStamp:
                 begin
                   ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
@@ -482,8 +482,10 @@ begin
                   ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
                   qry.ParamByName(name).AsCurrency := StrToCurr(ValorCampo);
                 end;
-              ftFloat, ftFMTBcd:
+              ftSingle, ftFloat, ftFMTBcd:
               begin
+                ValorCampo := StringReplace(ValorCampo, '.', ',',[rfReplaceAll]);
+                ValorCampo := StringReplace(ValorCampo, '''','', [rfReplaceAll]);
                 qry.ParamByName(name).AsFloat := StrToFloat(ValorCampo);
               end;
               ftBlob:
