@@ -17,7 +17,12 @@ type
 
   TXMLNodeDictionary = class(TDictionary<string, IXMLDomNode>)
   end;
-  
+
+  TTabelaDetalhe = class;
+
+  TTabelaDetalheList = class(TObjectList<TTabelaDetalhe>)
+  end;
+
   TFieldDictionary = class
   private
    FFieldName: string;
@@ -47,18 +52,22 @@ type
 
   TAnonymousMethod = reference to procedure(aDataSet: TDataSet);
 
-  TNameTranslation = record
+  TNameTranslation = class
+  public
     server: string;
     pdv: string;
     lookupRemoteTable: string;
     fkName: string;
   end;
 
+  TNameTranslationsList = class (TObjectList<TNameTranslation>)
+  end;
+
   TTranslationSet = class
-    protected
-      translations: array of TNameTranslation;
     public
+      Translations: TNameTranslationsList;
       constructor create(owner: TComponent);
+      destructor Destroy; override;
       procedure add(serverName, pdvName: string;
         lookupRemoteTable: string = ''; fkName: string = '');
       function translateServerToPDV(serverName: string; duasVias: boolean): string;
@@ -67,9 +76,13 @@ type
       function get(index: integer): TNameTranslation;
   end;
 
-  TTabelaDependente = record
+  TTabelaDependente = class
+  public
     nomeTabela: string;
     nomeFK: string;
+  end;
+
+  TTabelaDependenteList = class (TObjectList<TTabelaDependente>)
   end;
 
   TJSONArrayContainer = class
@@ -89,7 +102,6 @@ type
     destructor Destroy; override;
   end;
 
-  TTabelaDetalhe = class;
 
   TDataIntegradorModuloWeb = class(TDataModule)
   private
@@ -104,11 +116,13 @@ type
       tabelaDetalhe: TTabelaDetalhe);
     function GetErrorMessage(const aXML: string): string;
     procedure SetDataLog(const Value: ILog);
-    procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
+    procedure UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : TTabelaDetalheList);
     procedure SetthreadControl(const Value: IThreadControl);
     procedure OnWorkHandler(ASender: TObject; AWorkMode: TWorkMode; AWorkCount: Int64);
     function getFieldInsertList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
     function BinaryFromBase64(const base64: string): TBytesStream;
+    procedure SelectDetailsIterate(aDetailList: TDetailList; aValorPK: integer);
+    procedure addTabelaDetalheParamsIterate(valorPK: integer; params: TStringList);
   protected
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
@@ -124,8 +138,8 @@ type
     useMultipartParams: boolean;
     clientToServer: boolean;
     encodeJsonValues : boolean;
-    tabelasDependentes: array of TTabelaDependente;
-    tabelasDetalhe: array of TTabelaDetalhe;
+    tabelasDependentes: TTabelaDependenteList;
+    tabelasDetalhe: TTabelaDetalheList;
     offset: integer;
     paramsType: TParamsType;
     function getVersionFieldName: string; virtual;
@@ -420,13 +434,14 @@ end;
 
 function TDataIntegradorModuloWeb.getTranslatedTable(const aServerName: string): TDataIntegradorModuloWeb;
 var
-  i: integer;
+  Detalhe : TDataIntegradorModuloWeb;
 begin
   Result := nil;
-  for i := 0 to Length(Self.tabelasDetalhe) - 1 do
-    if AnsiSameText(underscorize(aServerName), Self.tabelasDetalhe[i].nomePlural) then
+
+  for Detalhe in tabelasDetalhe do
+    if AnsiSameText(underscorize(aServerName), Detalhe.nomePlural) then
     begin
-      Result := Self.tabelasDetalhe[i];
+      Result := Detalhe;
       break;
     end;
 end;
@@ -612,29 +627,30 @@ begin
     Self.ExecInsertRecord(node, id, Self);
 end;
 
-procedure TDataIntegradorModuloWeb.UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : array of TTabelaDetalhe);
+procedure TDataIntegradorModuloWeb.UpdateRecordDetalhe(pNode: IXMLDomNode; pTabelasDetalhe : TTabelaDetalheList);
 var
-   i,j : integer;
-   vNode : IXMLDomNode;
-   vNodeList: IXMLDOMNodeList;
-   vIdRemoto, vPkLocal : String;
-   vNomePlural, vNomeSingular: string;
+  j : integer;
+  vNode: IXMLDomNode;
+  vNodeList: IXMLDOMNodeList;
+  vIdRemoto, vPkLocal : String;
+  vNomePlural, vNomeSingular: string;
+  Detalhe: TTabelaDetalhe;
 begin
   try
-    for i := low(pTabelasDetalhe) to high(pTabelasDetalhe) do
+    for Detalhe in pTabelasDetalhe do
     begin
-      vNomePlural := pTabelasDetalhe[i].nomePlural;
-      vNomeSingular := pTabelasDetalhe[i].FnomeSingular;
+      vNomePlural := Detalhe.nomePlural;
+      vNomeSingular := Detalhe.nomeSingular;
 
       if VNomePlural = EmptyStr then
       begin
-        onDetailNamesMalformed(pTabelasDetalhe[i].nomeTabela, 'NomePlural');
+        onDetailNamesMalformed(Detalhe.nomeTabela, 'NomePlural');
         exit;
       end;
 
       if vNomeSingular = EmptyStr then
       begin
-        onDetailNamesMalformed(pTabelasDetalhe[i].nomeTabela, 'NomeSingular');
+        onDetailNamesMalformed(Detalhe.nomeTabela, 'NomeSingular');
         exit;
       end;
 
@@ -647,12 +663,12 @@ begin
         vPkLocal := vNodeList[j].selectSingleNode('./original-id').text;
 
         if duasVias then
-          dmPrincipal.execSQL('UPDATE ' + pTabelasDetalhe[i].nomeTabela + ' SET salvouRetaguarda = ' +
+          dmPrincipal.execSQL('UPDATE ' + Detalhe.nomeTabela + ' SET salvouRetaguarda = ' +
                           QuotedStr('S') + ', idRemoto = ' + vIdRemoto +
-                          ' WHERE salvouRetaguarda = ''N'' and ' + pTabelasDetalhe[i].nomePKLocal + ' = ' + vPkLocal) ;
+                          ' WHERE salvouRetaguarda = ''N'' and ' + Detalhe.nomePKLocal + ' = ' + vPkLocal) ;
       end;
-      if (Length(pTabelasDetalhe[i].tabelasDetalhe) > 0) and (vNode <> nil) then
-        Self.UpdateRecordDetalhe(vNode, pTabelasDetalhe[i].tabelasDetalhe);
+      if (Detalhe.tabelasDetalhe.Count > 0) and (vNode <> nil) then
+        Self.UpdateRecordDetalhe(vNode, Detalhe.tabelasDetalhe);
     end;
   except
     raise;
@@ -890,10 +906,20 @@ end;
 
 procedure TDataIntegradorModuloWeb.addDetailsToJsonList(aDetailList: TDetailList; aDs: TDataSet);
 var
-  i : integer;
+  Detalhe: TTabelaDetalhe;
 begin
-  for i := low(Self.tabelasDetalhe) to high(Self.tabelasDetalhe) do
-    Self.SelectDetails(aDetailList, aDs.fieldByName(nomePKLocal).AsInteger, Self.tabelasDetalhe[i]);
+  for Detalhe in  Self.tabelasDetalhe do
+    Self.SelectDetails(aDetailList, aDs.fieldByName(nomePKLocal).AsInteger, Detalhe);
+end;
+
+procedure TDataIntegradorModuloWeb.SelectDetailsIterate(aDetailList: TDetailList; aValorPK: integer);
+var
+  Detalhe: TTabelaDetalhe;
+begin
+  for  Detalhe in Self.tabelasDetalhe do
+  begin
+    SelectDetails(aDetailList, aValorPK, Detalhe);
+  end;
 end;
 
 procedure TDataIntegradorModuloWeb.SelectDetails(aDetailList: TDetailList; aValorPK: integer; aTabelaDetalhe: TTabelaDetalhe);
@@ -903,25 +929,25 @@ begin
   RunDataSet(aValorPk, aTabelaDetalhe,
              procedure (aDataSet: TDataSet)
              var
-               i: integer;
+               nomeParametro: string;
                Dict: TStringDictionary;
              begin
-               if not aDetailList.ContainsKey(aTabelaDetalhe.nomeParametro) then
+               if (aDetailList <> nil) and (not aDetailList.ContainsKey(aTabelaDetalhe.nomeParametro)) then
                begin
                  jsonArrayDetails := TJSONArrayContainer.Create;
                  jsonArrayDetails.nomePluralDetalhe := aTabelaDetalhe.nomePlural;
                  jsonArrayDetails.nomeSingularDetalhe := aTabelaDetalhe.FnomeSingular;
                  jsonArrayDetails.nomeTabela := aTabelaDetalhe.nomeTabela;
                  jsonArrayDetails.nomePkLocal := aTabelaDetalhe.nomePKLocal;
-                 aDetailList.Add(aTabelaDetalhe.nomeParametro, jsonArrayDetails);
+                 nomeParametro := aTabelaDetalhe.nomeParametro;
+                 aDetailList.Add(nomeParametro, jsonArrayDetails);
                end
                else
                  jsonArrayDetails := aDetailList.Items[aTabelaDetalhe.nomeParametro];
                Dict := Self.DataSetToArray(aDataSet);
                try
                  jsonArrayDetails.getJsonArray.AddElement(Self.getJsonObject(aDataSet, aTabelaDetalhe.translations, Dict, aTabelaDetalhe.nomeParametro));
-                 for i := low(aTabelaDetalhe.tabelasDetalhe) to high(aTabelaDetalhe.tabelasDetalhe) do
-                   SelectDetails(aDetailList, aDataSet.fieldByName(aTabelaDetalhe.nomePKLocal).AsInteger, aTabelaDetalhe.tabelasDetalhe[i]);
+                 aTabelaDetalhe.SelectDetailsIterate(aDetailList, aDataSet.fieldByName(aTabelaDetalhe.nomePKLocal).AsInteger);
                finally
                  Dict.Free;
                end;
@@ -1028,7 +1054,7 @@ var
   StringUTF8: UTF8String;
 begin
   Result := TJsonObject.Create;
-  Result.Owned := False;
+  Result.Owned := False; // Manter como False
   for i := 0 to aTranslations.size-1 do
   begin
     nomeCampo := aTranslations.get(i).pdv;
@@ -1094,12 +1120,20 @@ begin
     try
       jResponse.AddPair(Self.nomeSingularSave, JMaster);
       for Item in aDetailList do
+      begin
+        JMaster.Owned := True;
         JMaster.AddPair(item.Key, Item.Value.getJsonArray);
+        Item.Value.FJSonArray.Free;
+        Item.Value.Free;
+      end;
       apStream.WriteString(JResponse.ToString);
+
     finally
       JResponse.Free;
+      JMaster.Free;
     end;
   finally
+    Dict.Clear;
     Dict.Free;
   end;
 end;
@@ -1255,7 +1289,7 @@ begin
             end;
           end;
 
-          if (Length(TabelasDetalhe) > 0) and (Result.selectSingleNode(dasherize(nomeSingularSave)) <> nil) then
+          if (TabelasDetalhe.Count > 0) and (Result.selectSingleNode(dasherize(nomeSingularSave)) <> nil) then
              Self.UpdateRecordDetalhe(Result.selectSingleNode(dasherize(nomeSingularSave)), TabelasDetalhe);
 
         end;
@@ -1331,10 +1365,19 @@ end;
 
 procedure TDataIntegradorModuloWeb.addDetails(ds: TDataSet; params: TStringList);
 var
-  i : integer;
+  Detalhe : TTabelaDetalhe;
 begin
-  for i := low(tabelasDetalhe) to high(tabelasDetalhe) do
-    addTabelaDetalheParams(ds.fieldByName(nomePKLocal).AsInteger, params, tabelasDetalhe[i]);
+  for Detalhe in tabelasDetalhe do
+    addTabelaDetalheParams(ds.fieldByName(nomePKLocal).AsInteger, params, Detalhe);
+end;
+
+procedure TDataIntegradorModuloWeb.addTabelaDetalheParamsIterate(valorPK: integer;
+  params: TStringList);
+var
+  Detalhe: TTabelaDetalhe;
+begin
+  for Detalhe in Self.tabelasDetalhe do
+    addTabelaDetalheParams(valorPK, params, Detalhe);
 end;
 
 procedure TDataIntegradorModuloWeb.addTabelaDetalheParams(valorPK: integer;
@@ -1344,12 +1387,9 @@ begin
   RunDataSet(valorPk,
              TabelaDetalhe,
              procedure (aDataSet: TDataSet)
-             var
-               i: integer;
              begin
                addTranslatedParams(aDataSet, params, tabelaDetalhe.translations, tabelaDetalhe.nomeParametro);
-               for i := low(tabelaDetalhe.tabelasDetalhe) to high(tabelaDetalhe.tabelasDetalhe) do
-                 addTabelaDetalheParams(aDataSet.fieldByName(tabelaDetalhe.nomePKLocal).AsInteger, params, tabelaDetalhe.tabelasDetalhe[i]);
+               tabelaDetalhe.addTabelaDetalheParamsIterate(aDataSet.fieldByName(tabelaDetalhe.nomePKLocal).AsInteger, params);
 
             end);
 end;
@@ -1447,17 +1487,17 @@ end;
 
 procedure TDataIntegradorModuloWeb.redirectRecord(idAntigo, idNovo: integer);
 var
-  i: integer;
+  Dependente: TTabelaDependente;
   nomeFK: string;
 begin
   beforeRedirectRecord(idAntigo, idNovo);
   //Para cada tabela que referenciava esta devemos dar o update do id antigo para o novo
-  for i:= low(tabelasDependentes) to high(tabelasDependentes) do
+  for Dependente in tabelasDependentes do
   begin
-    nomeFK := tabelasDependentes[i].nomeFK;
+    nomeFK := Dependente.nomeFK;
     if nomeFK = '' then
       nomeFK := nomePKLocal;
-    dmPrincipal.execSQL('UPDATE ' + tabelasDependentes[i].nomeTabela +
+    dmPrincipal.execSQL('UPDATE ' + Dependente.nomeTabela +
     ' set ' + nomeFK + ' = ' + IntToStr(idNovo) +
     ' where ' + nomeFK + ' = ' + IntToStr(idAntigo));
     dmPrincipal.refreshData;    
@@ -1472,14 +1512,14 @@ end;
 procedure TTranslationSet.add(serverName, pdvName: string;
   lookupRemoteTable: string = ''; fkName: string = '');
 var
-  tam: integer;
+  Translation: TNameTranslation;
 begin
-  tam := length(translations);
-  SetLength(translations, tam + 1);
-  translations[tam].server := serverName;
-  translations[tam].pdv := pdvName;
-  translations[tam].lookupRemoteTable := lookupRemoteTable;
-  translations[tam].fkName := fkName;
+  Translation := TNameTranslation.Create;
+  Translation.server := serverName;
+  Translation.pdv := pdvName;
+  Translation.lookupRemoteTable := lookupRemoteTable;
+  Translation.fkName := fkName;
+  Translations.Add(Translation);
 end;
 
 procedure TDataIntegradorModuloWeb.beforeRedirectRecord(idAntigo, idNovo: integer);
@@ -1489,7 +1529,18 @@ end;
 
 constructor TTranslationSet.create(owner: TComponent);
 begin
-  SetLength(translations, 0);
+  Translations := TNameTranslationsList.Create(True);
+end;
+
+destructor TTranslationSet.Destroy;
+var
+  item: TObject;
+begin
+  for item in Translations do
+    item.Free;
+  Translations.Clear;
+  Translations.Free;
+  inherited;
 end;
 
 function TTranslationSet.get(index: integer): TNameTranslation;
@@ -1499,32 +1550,36 @@ end;
 
 function TTranslationSet.size: integer;
 begin
-  result := length(translations);
+  Result := Translations.Count;
 end;
 
 function TTranslationSet.translatePDVToServer(pdvName: string): string;
 var
-  i: integer;
+  Translation: TNameTranslation;
 begin
-  result := '';
-  for i := low(translations) to high(translations) do
-    if translations[i].pdv = pdvName then
-      result := translations[i].server;
+  Result := '';
+
+  for Translation in Self.Translations do
+    if translation.pdv = pdvName then
+    begin
+      Result := translation.server;
+      Break;
+    end;
 end;
 
 function TTranslationSet.translateServerToPDV(serverName: string; duasVias: boolean): string;
 var
-  i: integer;
+  Translation: TNameTranslation;
 begin
   result := '';
   if duasVias and (upperCase(serverName) = 'ID') then
     result := 'idRemoto'
   else
-    for i := low(translations) to high(translations) do
-      if translations[i].server = underscorize(serverName) then
+    for Translation in Self.Translations do
+      if translation.server = underscorize(serverName)  then
       begin
-        result := translations[i].pdv;
-        break;
+        Result := translation.pdv;
+        Break;
       end;
 end;
 
@@ -1537,7 +1592,6 @@ begin
   translations := TTranslationSet.create(self);
   nomePKLocal := 'id';
   nomePKRemoto := 'id';
-  SetLength(tabelasDependentes, 0);
   nomeGenerator := '';
   usePKLocalMethod := false;
   useMultipartParams := false;
@@ -1546,17 +1600,22 @@ begin
   FStopOnGetRecordError := False;
   Self.encodeJsonValues := False;
   translations.add('id', 'idremoto');
+  tabelasDetalhe := TTabelaDetalheList.Create(True);
+  tabelasDependentes := TTabelaDependenteList.Create(True);
 end;
 
 
 destructor TDataIntegradorModuloWeb.Destroy;
 var
-  i: integer;
+  Detalhe: TTabelaDetalhe;
+  Dependente: TTabelaDependente;
 begin
-  for i := Low(Self.tabelasDetalhe) to High(Self.tabelasDetalhe) do
-     Self.tabelasDetalhe[i].Free;
+  for Detalhe in Self.tabelasDetalhe do
+     Detalhe.Free;
+  for Dependente in Self.tabelasDependentes do
+     Dependente.Free;
   if Self.FFieldList <> nil then
-    Self.FFieldList.Free;
+    FreeAndNil(Self.FFieldList);
   inherited;
 end;
 
@@ -1683,15 +1742,15 @@ end;
 procedure TDataIntegradorModuloWeb.SetdmPrincipal(
   const Value: IDataPrincipal);
 var
-  i: Integer;
+  Detalhe: TTabelaDetalhe;
 begin
   FdmPrincipal := Value;
   if Value <> nil then
   begin
     if Self.FFieldList = nil then
       Self.FFieldList := TFieldDictionaryList.Create(Self.nomeTabela, Value);
-    for i := 0 to High(Self.tabelasDetalhe) do
-      TTabelaDetalhe(Self.tabelasDetalhe[i]).DmPrincipal := Value;
+    for Detalhe in Self.tabelasDetalhe do
+      TTabelaDetalhe(Detalhe).DmPrincipal := Value;
   end;
 end;
 
@@ -1813,6 +1872,7 @@ end;
 
 destructor TJSONArrayContainer.Destroy;
 begin
+  Self.FJSonArray.Free;
   inherited;
 end;
 
@@ -1964,8 +2024,8 @@ begin
   begin
     for Json in Pair.Value.getJsonArray do
       Json.Free;
-    Pair.Value.Free;
   end;
+  Self.Clear;
   inherited;
 end;
 
