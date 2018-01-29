@@ -228,7 +228,7 @@ type
     property stopOnPostRecordError: boolean read FstopOnPostRecordError write FstopOnPostRecordError;
     property stopOnGetRecordError: boolean read FStopOnGetRecordError write FstopOnGetRecordError;
     function buildRequestURL(nomeRecurso: string; params: string = ''; httpAction: THttpAction = haGet): string; virtual; abstract;
-    procedure getDadosAtualizados(http: TIdHTTP = nil);
+    procedure getDadosAtualizados(http: TIdHTTP = nil); virtual;
     function saveRecordToRemote(ds: TDataSet; var salvou: boolean; http: TidHTTP = nil): IXMLDomDocument2;
     procedure migrateSingletonTableToRemote;
     procedure postRecordsToRemote(http: TidHTTP = nil); virtual;
@@ -308,6 +308,10 @@ begin
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_BLUE OR 4 OR FOREGROUND_INTENSITY ); //);
     writeln('URL: ' + url);
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+
+    Self.Log(Format('Buscando %s',[getHumanReadableName]));
+    Self.Log(url);
+
     xmlContent := getRemoteXmlContent(url, http, erro);
 
     if (erro <> EmptyStr) then
