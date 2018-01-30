@@ -596,7 +596,7 @@ begin
       Detail := Self.getTranslatedTable(ChildNode.Key);
       if Detail <> nil then
       begin
-        list := ChildNode.Value.selectNodes(underscorize(Detail.fnomeSingular));
+        list := ChildNode.Value.selectNodes(dasherize(Detail.fnomeSingular));
         if list <> nil then
         begin
           numRegistros := list.length;
