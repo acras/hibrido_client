@@ -123,6 +123,7 @@ type
     function BinaryFromBase64(const base64: string): TBytesStream;
     procedure SelectDetailsIterate(aDetailList: TDetailList; aValorPK: integer);
     procedure addTabelaDetalheParamsIterate(valorPK: integer; params: TStringList);
+    procedure ExecQuery(aQry: TSQLDataSet);
   protected
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
@@ -520,13 +521,31 @@ begin
   end;
 end;
 
+procedure TDataIntegradorModuloWeb.ExecQuery(aQry: TSQLDataSet);
+var
+  i: integer;
+  Paramlog, vLog: string;
+begin
+  try
+    aQry.ExecSQL;
+  except
+    on E:Exception do
+    begin
+      ParamLog := EmptyStr;
+      for i := 0 to aQry.Params.Count - 1 do
+        ParamLog := ParamLog + aQry.Params[i].Name + ' = "' + aQry.Params[i].AsString + '"' + #13#10;
+      vLog := 'Erro ExecSQL: ' + #13#10 + aQry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
+        Raise EIntegradorException.Create(vLog);
+    end;
+  end;
+end;
+
 procedure TDataIntegradorModuloWeb.ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb);
 var
   i: integer;
   name: string;
   qry: TSQLDataSet;
   FieldsListUpdate, FieldsListInsert : string;
-  Paramlog, vLog: string;
   Existe: Boolean;
   NewId: integer;
   ChildrenNodes: TXMLNodeDictionary;
@@ -539,6 +558,7 @@ var
   Detail: TDataIntegradorModuloWeb;
   DMLOperation: TDMLOperation;
   StrCheckInsert: TStringList;
+
 begin
   Existe := jaExiste(id, Integrador.nomeTabela, Integrador.nomePKLocal);
   qry := dmPrincipal.getQuery;
@@ -578,18 +598,7 @@ begin
 
     Self.SetQueryParameters(qry, DMLOperation, node, ChildrenNodes, Integrador);
 
-    try
-      qry.ExecSQL;
-    except
-      on E:Exception do
-      begin
-        ParamLog := EmptyStr;
-        for i := 0 to qry.Params.Count - 1 do
-          ParamLog := ParamLog + qry.Params[i].Name + ' = "' + qry.Params[i].AsString + '"' + #13#10;
-        vLog := 'Erro ExecSQL: ' + #13#10 + qry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
-          Raise EIntegradorException.Create(vLog);
-      end;
-    end;
+    Self.ExecQuery(qry);
 
     for ChildNode in ChildrenNodes do
     begin
@@ -615,6 +624,12 @@ begin
       end;
     end;
 
+    qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET SALVOURETAGUARDA = ''S''';
+    if DuasVias then
+      qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
+    else
+      qry.CommandText := qry.CommandText + ' WHERE ' + Integrador.nomePKLocal + ' = ' + IntToStr(id);
+    Self.ExecQuery(qry);
   finally
     FreeAndNil(qry);
     FreeAndNil(ChildrenNodes);
