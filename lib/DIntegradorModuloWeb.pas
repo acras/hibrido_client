@@ -659,10 +659,12 @@ begin
         end;
       end;
     end;
-
-    qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET SALVOURETAGUARDA = ''S''';
-    qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
-    Self.ExecQuery(qry);
+    if ChildrenNodes.Count > 0 then
+    begin
+      qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET SALVOURETAGUARDA = ''S''';
+      qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
+      Self.ExecQuery(qry);
+    end;
   finally
     FreeAndNil(qry);
     FreeAndNil(ChildrenNodes);
