@@ -221,6 +221,7 @@ type
     procedure setNomePKLocal(const Value: string); virtual;
     procedure SetQueryParameters(qry: TSQLDataSet; DMLOperation: TDMLOperation; node: IXMLDomNode; ChildrenNodes: TXMLNodeDictionary;
       Integrador: TDataIntegradorModuloWeb); virtual;
+    function GetDefaultValueForSalvouRetaguarda: Char; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -365,6 +366,11 @@ begin
   afterDadosAtualizados;
 end;
 
+function TDataIntegradorModuloWeb.GetDefaultValueForSalvouRetaguarda: Char;
+begin
+  Result := 'S';
+end;
+
 procedure TDataIntegradorModuloWeb.UpdateVersionId(const aId, aLastVersionId: integer);
 var
   qryVersionId: TSQLDataSet;
@@ -375,7 +381,7 @@ begin
     qryVersionId := dmPrincipal.getQuery;
     try
       qryVersionId.CommandText := 'UPDATE ' + Self.nomeTabela +' SET ' + Self.getVersionFieldName + ' = :NewVersion, '+
-                                  'SalvouRetaguarda = ''S''' +
+                                  'SalvouRetaguarda = ' + QuotedStr(Self.GetDefaultValueForSalvouRetaguarda) +
                                    Self.CheckQryCommandTextForDuasVias(aId, Self);
       qryVersionId.ParamByName('NewVersion').AsInteger := aLastVersionId;
 
@@ -659,12 +665,7 @@ begin
         end;
       end;
     end;
-    if ChildrenNodes.Count > 0 then
-    begin
-      qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET SALVOURETAGUARDA = ''S''';
-      qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
-      Self.ExecQuery(qry);
-    end;
+
   finally
     FreeAndNil(qry);
     FreeAndNil(ChildrenNodes);
@@ -717,8 +718,8 @@ begin
         vPkLocal := vNodeList[j].selectSingleNode('./original-id').text;
 
         if duasVias then
-          dmPrincipal.execSQL('UPDATE ' + Detalhe.nomeTabela + ' SET salvouRetaguarda = ' +
-                          QuotedStr('S') + ', idRemoto = ' + vIdRemoto +
+          dmPrincipal.execSQL('UPDATE ' + Detalhe.nomeTabela + ' SET salvouRetaguarda = '
+                          + QuotedStr(Self.GetDefaultValueForSalvouRetaguarda) + ', idRemoto = ' + vIdRemoto +
                           ' WHERE salvouRetaguarda = ''N'' and ' + Detalhe.nomePKLocal + ' = ' + vPkLocal) ;
       end;
       if (Detalhe.tabelasDetalhe.Count > 0) and (vNode <> nil) then
@@ -1314,7 +1315,7 @@ begin
         Result := Self.getXMLContentAsXMLDom(xmlContent);
         if duasVias or clientToServer then
         begin
-          txtUpdate := 'UPDATE ' + nomeTabela + ' SET salvouRetaguarda = ' + QuotedStr('S');
+          txtUpdate := 'UPDATE ' + nomeTabela + ' SET salvouRetaguarda = ' + QuotedStr(Self.GetDefaultValueForSalvouRetaguarda);
 
           if duasVias then
           begin
