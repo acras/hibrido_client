@@ -124,6 +124,8 @@ type
     procedure SelectDetailsIterate(aDetailList: TDetailList; aValorPK: integer);
     procedure addTabelaDetalheParamsIterate(valorPK: integer; params: TStringList);
     procedure ExecQuery(aQry: TSQLDataSet);
+    function CheckQryCommandTextForDuasVias(const aId: integer;  Integrador: TDataIntegradorModuloWeb): string;
+    procedure UpdateVersionId(const aId, aLastVersionId: integer);
   protected
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
@@ -151,7 +153,7 @@ type
     function getRequestUrlForAction(toSave: boolean; versao: integer = -1): string; virtual;
     function importRecord(node: IXMLDomNode): boolean; virtual;
     procedure updateInsertRecord(node: IXMLDomNode; const id: integer);
-    function jaExiste(const id: integer; const tableName, nomePk: string): boolean;
+    function jaExiste(const id: integer; Integrador: TDataIntegradorModuloWeb): boolean;
     function getFieldList(node: IXMLDomNode): string;
     function getFieldUpdateList(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
     function getFieldValues(node: IXMLDomNode; Integrador: TDataIntegradorModuloWeb): string;
@@ -294,6 +296,7 @@ var
   node : IXMLDomNode;
   keepImporting: boolean;
   vLog: string;
+  LastId, LastVersionId: integer;
 begin
   keepImporting := true;
   while keepImporting do
@@ -344,6 +347,13 @@ begin
           begin
             if not importRecord(node) and Self.FStopOnGetRecordError then
               Break;
+            if i = numRegistros - 1 then
+            begin
+              LastId := strToIntDef(node.selectSingleNode(dasherize(nomePKRemoto)).text, -1);
+              LastVersionId :=  strToIntDef(node.selectSingleNode(dasherize(Self.getVersionFieldName)).text, -1);
+              if (LastId > 0) and (LastVersionId > 0) then
+                Self.UpdateVersionId(LastId, LastVersionId);
+            end;
           end;
         end;
       finally
@@ -354,6 +364,32 @@ begin
   end;
   afterDadosAtualizados;
 end;
+
+procedure TDataIntegradorModuloWeb.UpdateVersionId(const aId, aLastVersionId: integer);
+var
+  qryVersionId: TSQLDataSet;
+begin
+  dmPrincipal.startTransaction;
+  try
+    //se for o último registro do xml, atualizar o version_id
+    qryVersionId := dmPrincipal.getQuery;
+    try
+      qryVersionId.CommandText := 'UPDATE ' + Self.nomeTabela +' SET ' + Self.getVersionFieldName + ' = :NewVersion, '+
+                                  'SalvouRetaguarda = ''S''' +
+                                   Self.CheckQryCommandTextForDuasVias(aId, Self);
+      qryVersionId.ParamByName('NewVersion').AsInteger := aLastVersionId;
+
+      Self.ExecQuery(qryVersionId);
+    finally
+      qryVersionId.Free;
+    end;
+     dmPrincipal.commit;
+  except
+    dmPrincipal.rollBack;
+    raise;
+  end;
+end;
+
 
 function TDataIntegradorModuloWeb.getHumanReadableName: string;
 begin
@@ -408,23 +444,17 @@ begin
   result := (nomePKLocal = '') and (nomePKRemoto = '');
 end;
 
-function TDataIntegradorModuloWeb.jaExiste(const id: integer; const tableName, nomePk: string): boolean;
+function TDataIntegradorModuloWeb.jaExiste(const id: integer; Integrador: TDataIntegradorModuloWeb): boolean;
 var
   qry: string;
 begin
-  if duasVias then
-    qry := 'SELECT count(1) FROM ' + tableName + ' where idRemoto = ' + IntToStr(id)
-  else
-    qry := 'SELECT count(1) FROM ' + tableName + ' where ' + nomePK + ' = ' + IntToStr(id);
+  qry := 'SELECT count(1) FROM ' + Integrador.nomeTabela + Self.CheckQryCommandTextForDuasVias(Id, Integrador);
   result := dmPrincipal.getSQLIntegerResult(qry) > 0;
 end;
 
 function TDataIntegradorModuloWeb.getUpdateStatement(node: IXMLDomNode; const id: integer): String;
 begin
-  if duasVias then
-    Result := getUpdateBaseSQL(node, Self) + ' WHERE idRemoto = ' + IntToStr(id)
-  else
-    Result := getUpdateBaseSQL(node, Self) + ' WHERE ' + nomePKLocal + ' = ' + IntToStr(id);
+  Result := getUpdateBaseSQL(node, Self) + Self.CheckQryCommandTextForDuasVias(Id, Self);
 end;
 
 function TDataIntegradorModuloWeb.getInsertStatement(node: IXMLDomNode): String;
@@ -535,9 +565,18 @@ begin
       for i := 0 to aQry.Params.Count - 1 do
         ParamLog := ParamLog + aQry.Params[i].Name + ' = "' + aQry.Params[i].AsString + '"' + #13#10;
       vLog := 'Erro ExecSQL: ' + #13#10 + aQry.CommandText + #13#10 + ParamLog + #13#10 + e.Message;
-        Raise EIntegradorException.Create(vLog);
+      Raise EIntegradorException.Create(vLog);
     end;
   end;
+end;
+
+function TDataIntegradorModuloWeb.CheckQryCommandTextForDuasVias(const aId: integer; Integrador: TDataIntegradorModuloWeb): string;
+begin
+  Result := EmptyStr;
+  if DuasVias then
+    Result := ' WHERE idRemoto = ' + IntToStr(aId)
+  else
+    Result := ' WHERE ' + Integrador.nomePKLocal + ' = ' + IntToStr(aId);
 end;
 
 procedure TDataIntegradorModuloWeb.ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb);
@@ -560,7 +599,7 @@ var
   StrCheckInsert: TStringList;
 
 begin
-  Existe := jaExiste(id, Integrador.nomeTabela, Integrador.nomePKLocal);
+  Existe := jaExiste(id, Integrador);
   qry := dmPrincipal.getQuery;
   ChildrenNodes := TXMLNodeDictionary.Create;
   try
@@ -569,10 +608,7 @@ begin
       DMLOperation := dmUpdate;
       FieldsListUpdate := Self.getFieldUpdateList(node, Integrador);
       qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET ' + FieldsListUpdate;
-      if DuasVias then
-        qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
-      else
-        qry.CommandText := qry.CommandText + ' WHERE ' + Integrador.nomePKLocal + ' = ' + IntToStr(id);
+      qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
     end
     else
     begin
@@ -625,10 +661,7 @@ begin
     end;
 
     qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET SALVOURETAGUARDA = ''S''';
-    if DuasVias then
-      qry.CommandText := qry.CommandText + ' WHERE idRemoto = ' + IntToStr(id)
-    else
-      qry.CommandText := qry.CommandText + ' WHERE ' + Integrador.nomePKLocal + ' = ' + IntToStr(id);
+    qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
     Self.ExecQuery(qry);
   finally
     FreeAndNil(qry);
