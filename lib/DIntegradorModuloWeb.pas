@@ -613,6 +613,9 @@ begin
     begin
       DMLOperation := dmUpdate;
       FieldsListUpdate := Self.getFieldUpdateList(node, Integrador);
+      if not StrUtils.ContainsText(FieldsListUpdate, 'SALVOURETAGUARDA') then
+        FieldsListUpdate := 'SALVOURETAGUARDA = ' + QuotedStr(Self.GetDefaultValueForSalvouRetaguarda)+ ','+ FieldsListUpdate;
+
       qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET ' + FieldsListUpdate;
       qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
     end
@@ -620,6 +623,9 @@ begin
     begin
       DMLOperation := dmInsert;
       FieldsListInsert := self.getFieldInsertList(node, Integrador);
+      if not StrUtils.ContainsText(FieldsListInsert, 'SALVOURETAGUARDA') then
+        FieldsListInsert := ':SALVOURETAGUARDA,' + FieldsListInsert;
+
       NewId := Integrador.getNewId(Node);
       if NewId > 0 then
       begin
@@ -636,6 +642,9 @@ begin
       qry.CommandText := 'INSERT INTO ' + Integrador.nomeTabela + '(' + StringReplace(FieldsListInsert, ':', '', [rfReplaceAll]) + ') values (' + FieldsListInsert + ')';
       if qry.Params.ParamByName(Integrador.nomePkLocal) <> nil then
         qry.ParamByName(Integrador.nomePkLocal).AsInteger := NewId;
+      if qry.Params.ParamByName('SALVOURETAGUARDA') <> nil then
+        qry.ParamByName('SALVOURETAGUARDA').asString := Self.GetDefaultValueForSalvouRetaguarda;
+
     end;
 
     Self.SetQueryParameters(qry, DMLOperation, node, ChildrenNodes, Integrador);
