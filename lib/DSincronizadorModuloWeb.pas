@@ -74,6 +74,8 @@ type
   end;
 
   TRunnerThreadPuters = class(TCustomRunnerThread)
+  private
+    procedure PopulateTranslatedTableNames(aTranslatedTableName: TStringDictionary);
   protected
     procedure setMainFormPuttingTrue;
     procedure finishPuttingProcess;
@@ -312,6 +314,28 @@ begin
     FNotifier.flagSalvandoDadosServidor;
 end;
 
+procedure TRunnerThreadPuters.PopulateTranslatedTableNames(aTranslatedTableName: TStringDictionary);
+var
+  i: integer;
+  dmIntegrador: TDataIntegradorModuloWeb;
+begin
+  for i := 0 to length(sincronizador.posterDataModules)-1 do
+  begin
+    if not Self.ShouldContinue then
+      Break;
+    dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
+    try
+      if (dmIntegrador.getNomeTabela <> EmptyStr) and (dmIntegrador.NomeSingular <> EmptyStr) then
+      begin
+        if not aTranslatedTableName.ContainsKey(dmIntegrador.getNomeTabela) then
+          aTranslatedTableName.Add(LowerCase(Trim(dmIntegrador.getNomeTabela)), LowerCase(Trim(dmIntegrador.NomeSingular)));
+      end;
+    finally
+      FreeAndNil(dmIntegrador);
+    end;
+  end;
+end;
+
 procedure TRunnerThreadPuters.Execute;
 var
   i: integer;
@@ -335,18 +359,14 @@ begin
         try
           http := getHTTPInstance;
           lTranslateTableNames := TStringDictionary.Create;
+          Self.PopulateTranslatedTableNames(lTranslateTableNames);
+
           for i := 0 to length(sincronizador.posterDataModules)-1 do
           begin
             if not Self.ShouldContinue then
               Break;
             dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
             try
-              if (dmIntegrador.getNomeTabela <> EmptyStr) and (dmIntegrador.NomeSingular <> EmptyStr) then
-              begin
-                if not lTranslateTableNames.ContainsKey(dmIntegrador.getNomeTabela) then
-                  lTranslateTableNames.Add(LowerCase(Trim(dmIntegrador.getNomeTabela)), LowerCase(Trim(dmIntegrador.NomeSingular)));
-              end;
-
               dmIntegrador.SetTranslateTableNames(lTranslateTableNames);
               dmIntegrador.notifier := FNotifier;
               dmIntegrador.threadControl := Self.FthreadControl;

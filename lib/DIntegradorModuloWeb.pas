@@ -382,7 +382,7 @@ begin
     try
       qryVersionId.CommandText := 'UPDATE ' + Self.nomeTabela +' SET ' + Self.getVersionFieldName + ' = :NewVersion, '+
                                   'SalvouRetaguarda = ' + QuotedStr(Self.GetDefaultValueForSalvouRetaguarda) +
-                                   Self.CheckQryCommandTextForDuasVias(aId, Self);
+                                  ' WHERE ' + Self.getVersionFieldName + ' = (SELECT MAX(' + Self.getVersionFieldName + ') FROM ' + Self.nomeTabela +')';
       qryVersionId.ParamByName('NewVersion').AsInteger := aLastVersionId;
 
       Self.ExecQuery(qryVersionId);
