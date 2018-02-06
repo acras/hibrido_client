@@ -316,8 +316,9 @@ end;
 
 procedure TRunnerThreadPuters.PopulateTranslatedTableNames(aTranslatedTableName: TStringDictionary);
 var
-  i: integer;
+  i, j: integer;
   dmIntegrador: TDataIntegradorModuloWeb;
+
 begin
   for i := 0 to length(sincronizador.posterDataModules)-1 do
   begin
@@ -326,10 +327,11 @@ begin
     dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
     try
       if (dmIntegrador.getNomeTabela <> EmptyStr) and (dmIntegrador.NomeSingular <> EmptyStr) then
-      begin
         if not aTranslatedTableName.ContainsKey(dmIntegrador.getNomeTabela) then
           aTranslatedTableName.Add(LowerCase(Trim(dmIntegrador.getNomeTabela)), LowerCase(Trim(dmIntegrador.NomeSingular)));
-      end;
+      for j := 0 to dmIntegrador.getTabelasDetalhe.Count -1 do
+        if not aTranslatedTableName.ContainsKey(dmIntegrador.getTabelasDetalhe[j].getNomeTabela) then
+          aTranslatedTableName.Add(LowerCase(Trim(dmIntegrador.getTabelasDetalhe[j].getNomeTabela)), LowerCase(Trim(dmIntegrador.getTabelasDetalhe[j].NomeSingular)));
     finally
       FreeAndNil(dmIntegrador);
     end;
