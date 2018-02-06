@@ -126,6 +126,7 @@ type
     procedure ExecQuery(aQry: TSQLDataSet);
     function CheckQryCommandTextForDuasVias(const aId: integer;  Integrador: TDataIntegradorModuloWeb): string;
     procedure UpdateVersionId(const aId, aLastVersionId: integer);
+    procedure resyncRecord(const aId: integer);
   protected
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
@@ -430,12 +431,29 @@ begin
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
           Self.log(e.Message);
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+          Self.resyncRecord(id);
         end;
       end;
     end;
   end
   else
     updateSingletonRecord(node);
+end;
+
+procedure TDataIntegradorModuloWeb.resyncRecord(const aId: integer);
+var
+  qry: TSQLDataSet;
+begin
+  qry := DMPrincipal.getQuery;
+  try
+    if aId > 0 then
+    begin
+      qry.CommandText := 'UPDATE ' + Self.nomeTabela + ' Set SalvouRetaguarda = ''N'' ' + Self.CheckQryCommandTextForDuasVias(aId, Self);
+      ExecQuery(qry);
+    end;
+  finally
+    qry.Free;
+  end;
 end;
 
 function TDataIntegradorModuloWeb.shouldContinue: boolean;
