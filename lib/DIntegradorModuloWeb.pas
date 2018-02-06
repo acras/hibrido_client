@@ -251,6 +251,7 @@ type
     property nomePlural: string read GetNomePlural write setNomePlural;
     property nomePKLocal: string read GetNomePKLocal write setNomePKLocal;
     function getFieldDictionaryList: TFieldDictionaryList;
+    function getTabelasDetalhe: TTabelaDetalheList;
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -972,6 +973,11 @@ end;
 procedure TDataIntegradorModuloWeb.afterDadosAtualizados;
 begin
   //
+end;
+
+function TDataIntegradorModuloWeb.getTabelasDetalhe: TTabelaDetalheList;
+begin
+  Result := Self.tabelasDetalhe;
 end;
 
 function TDataIntegradorModuloWeb.getTimeoutValue: integer;
