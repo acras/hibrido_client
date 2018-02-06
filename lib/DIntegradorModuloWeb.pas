@@ -1537,15 +1537,6 @@ begin
         notifier.unflagSalvandoDadosServidor;
       if Total > 0 then
         Self.log(Format('Post de records para remote comitados. Classe: %s. Total de registros: %d.', [ClassName, total]), 'Sync');
-      qry.Close;
-      qry.commandText := 'SELECT COUNT(*) FROM ' + nomeTabela + ' WHERE SALVOURETAGUARDA = ''N''';
-      qry.Open;
-      if (not qry.IsEmpty) and (qry.Fields[0].AsInteger > 0) then
-      begin
-        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED OR FOREGROUND_BLUE OR FOREGROUND_INTENSITY);
-        writeln(Format('Registros da tabela "%s" que não subiram: %d',[ nomeTabela, qry.Fields[0].AsInteger] ));
-        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
-      end;
 
     except
       Self.log('Erro no processamento do postRecordsToRemote. Classe: ' + ClassName, 'Sync');
