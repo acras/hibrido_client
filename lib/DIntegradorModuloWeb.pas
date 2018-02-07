@@ -311,10 +311,11 @@ begin
     if notifier <> nil then
       notifier.setCustomMessage('Buscando ' + getHumanReadableName + '...');
     numRegistros := 0;
-
+    {$IFDEF HibridoClientDLL}
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_BLUE OR 4 OR FOREGROUND_INTENSITY ); //);
     writeln('URL: ' + url);
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+    {$ENDIF}
 
     Self.Log(Format('Buscando %s',[getHumanReadableName]));
     Self.Log(url);
@@ -429,9 +430,13 @@ begin
         begin
           dmPrincipal.rollBack;
           Self.log(Format('Erro ao importar a tabela "%s":', [self.nomeTabela]));
+          {$IFDEF HibridoClientDLL}
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
+          {$ENDIF}
           Self.log(e.Message);
+          {$IFDEF HibridoClientDLL}
           SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+          {$ENDIF}
           Self.resyncRecord(id);
         end;
       end;
@@ -1517,9 +1522,11 @@ begin
       Self.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
       qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
         + getAdditionalSaveConditions;
+      {$IFDEF HibridoClientDLL}
       SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14 OR 4); //FOREGROUND_RED);
       writeln(qry.CommandText);
       SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+      {$ENDIF}
       qry.Open;
       total := qry.RecordCount;
       n := 1;
