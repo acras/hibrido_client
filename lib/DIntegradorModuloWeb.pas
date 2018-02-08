@@ -223,6 +223,7 @@ type
     procedure SetQueryParameters(qry: TSQLDataSet; DMLOperation: TDMLOperation; node: IXMLDomNode; ChildrenNodes: TXMLNodeDictionary;
       Integrador: TDataIntegradorModuloWeb); virtual;
     function GetDefaultValueForSalvouRetaguarda: Char; virtual;
+    function getSQLStatementForPost: string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -1507,6 +1508,11 @@ begin
   end;
 end;
 
+function TDataIntegradorModuloWeb.getSQLStatementForPost: string;
+begin
+  Result := 'SELECT * from ' + Self.nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
+        + getAdditionalSaveConditions;
+end;
 
 procedure TDataIntegradorModuloWeb.postRecordsToRemote(http: TidHTTP = nil);
 var
@@ -1520,8 +1526,8 @@ begin
   try
     try
       Self.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
-      qry.commandText := 'SELECT * from ' + nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
-        + getAdditionalSaveConditions;
+      qry.commandText := Self.getSQLStatementForPost;
+
       {$IFDEF HibridoClientDLL}
       SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14 OR 4); //FOREGROUND_RED);
       writeln(qry.CommandText);

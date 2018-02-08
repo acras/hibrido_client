@@ -4,12 +4,20 @@ interface
 
 uses
   ActiveX, SysUtils, Classes, ExtCtrls, DIntegradorModuloWeb, Dialogs, Windows, IDataPrincipalUnit,
-    ISincronizacaoNotifierUnit, IdHTTP;
+  ISincronizacaoNotifierUnit, IdHTTP,  System.Generics.Collections;
 
 type
   TStepGettersEvent = procedure(name: string; step, total: integer) of object;
-  TServerToClientBlock = array of TDataIntegradorModuloWebClass;
-  TGetterBlocks = array of TServerToClientBlock;
+
+  TServerToClientBlock = class(TList<TDataIntegradorModuloWebClass>)
+  end;
+
+  TGetterBlocks = class(TList<TServerToClientBlock>)
+  end;
+
+  TPosterDataModules = class(TList<TDataIntegradorModuloWebClass>)
+  end;
+
   TDataSincronizadorModuloWeb = class(TDataModule)
     sincronizaRetaguardaTimer: TTimer;
     procedure DataModuleCreate(Sender: TObject);
@@ -17,6 +25,8 @@ type
   private
     atualizando: boolean;
     FonStepGetters: TStepGettersEvent;
+    FgetterBlocks: TGetterBlocks;
+    FposterDataModules: TPosterDataModules;
     procedure SetonStepGetters(const Value: TStepGettersEvent);
     function ShouldContinue: boolean;
   protected
@@ -25,8 +35,8 @@ type
     FCustomParams: ICustomParams;
     FDataLog: ILog;
   public
-    posterDataModules: array of TDataIntegradorModuloWebClass;
-    getterBlocks: TGetterBlocks;
+    property posterDataModules: TPosterDataModules read FposterDataModules write FPosterDataModules;
+    property getterBlocks: TGetterBlocks read FgetterBlocks write FgetterBlocks;
     function getNewDataPrincipal: IDataPrincipal; virtual; abstract;
     procedure addPosterDataModule(dm: TDataIntegradorModuloWebClass);
     procedure addGetterBlock(getterBlock: TServerToClientBlock);
@@ -39,6 +49,7 @@ type
     property threadControl: IThreadControl read FthreadControl write FthreadControl;
     property CustomParams: ICustomParams read FCustomParams write FCustomParams;
     property Datalog: ILog read FDataLog write FDataLog;
+    destructor Destroy; override;
   published
     property onStepGetters: TStepGettersEvent read FonStepGetters write SetonStepGetters;
   end;
@@ -96,12 +107,8 @@ uses ComObj, acNetUtils;
 
 procedure TDataSincronizadorModuloWeb.addPosterDataModule(
   dm: TDataIntegradorModuloWebClass);
-var
-  size: integer;
 begin
-  size := length(posterDataModules);
-  SetLength(posterDataModules, size + 1);
-  posterDataModules[size] := dm;
+  Self.FposterDataModules.Add(dm);
 end;
 
 procedure TDataSincronizadorModuloWeb.threadedGetUpdatedData;
@@ -138,7 +145,7 @@ begin
     dm := getNewDataPrincipal;
     http := getHTTPInstance;
     try
-      for i := 0 to length(getterBlocks) - 1 do
+      for i := 0 to getterBlocks.Count - 1 do
       begin
         if not Self.ShouldContinue then
           Break;
@@ -146,7 +153,7 @@ begin
         block := getterBlocks[i];
         dm.startTransaction;
         try
-          for j := 0 to length(block) - 1 do
+          for j := 0 to block.Count - 1 do
           begin
             if not Self.ShouldContinue then
               Break;
@@ -160,7 +167,7 @@ begin
               dimw.CustomParams := Self.FCustomParams;
               dimw.DataLog := Self.FDataLog;
               dimw.getDadosAtualizados(http);
-              if Assigned(onStepGetters) then onStepGetters(dimw.getHumanReadableName, i+1, length(getterBlocks));
+              if Assigned(onStepGetters) then onStepGetters(dimw.getHumanReadableName, i+1, getterBlocks.Count);
             finally
               dimw.free;
             end;
@@ -190,12 +197,19 @@ end;
 
 procedure TDataSincronizadorModuloWeb.DataModuleCreate(Sender: TObject);
 begin
-  SetLength(posterDataModules, 0);
-  SetLength(getterBlocks, 0);
   sincronizaRetaguardaTimer.Enabled := false;
   atualizando := false;
   salvandoRetaguarda := false;
   gravandoVenda := false;
+  Self.FposterDataModules := TPosterDataModules.Create;
+  Self.FgetterBlocks := TGetterBlocks.Create;
+end;
+
+destructor TDataSincronizadorModuloWeb.Destroy;
+begin
+  Self.FgetterBlocks.Free;
+  Self.FposterDataModules.Free;
+  inherited;
 end;
 
 procedure TDataSincronizadorModuloWeb.ativar;
@@ -210,12 +224,8 @@ end;
 
 procedure TDataSincronizadorModuloWeb.addGetterBlock(
   getterBlock: TServerToClientBlock);
-var
-  size: integer;
 begin
-  size := length(getterBlocks);
-  SetLength(getterBlocks, size + 1);
-  getterBlocks[size] := getterBlock;
+  getterBlocks.Add(getterBlock);
 end;
 
 procedure TDataSincronizadorModuloWeb.sincronizaRetaguardaTimerTimer(
@@ -257,10 +267,10 @@ var
   block: TServerToClientBlock;
 begin
   //DataPrincipal.refreshData;
-  for i := 0 to length(sincronizador.getterBlocks) - 1 do
+  for i := 0 to sincronizador.getterBlocks.Count - 1 do
   begin
     block := sincronizador.getterBlocks[i];
-    for j := 0 to length(block) - 1 do
+    for j := 0 to block.Count - 1 do
     begin
       block[j].updateDataSets;
     end;
@@ -318,9 +328,8 @@ procedure TRunnerThreadPuters.PopulateTranslatedTableNames(aTranslatedTableName:
 var
   i, j: integer;
   dmIntegrador: TDataIntegradorModuloWeb;
-
 begin
-  for i := 0 to length(sincronizador.posterDataModules)-1 do
+  for i := 0 to sincronizador.posterDataModules.Count - 1 do
   begin
     if not Self.ShouldContinue then
       Break;
@@ -363,7 +372,7 @@ begin
           lTranslateTableNames := TStringDictionary.Create;
           Self.PopulateTranslatedTableNames(lTranslateTableNames);
 
-          for i := 0 to length(sincronizador.posterDataModules)-1 do
+          for i := 0 to sincronizador.posterDataModules.Count - 1 do
           begin
             if not Self.ShouldContinue then
               Break;
