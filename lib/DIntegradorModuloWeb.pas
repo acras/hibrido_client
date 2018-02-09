@@ -12,6 +12,28 @@ uses
   Soap.EncdDecd, Variants {$IFDEF VER250}, Data.DBXJSON, Data.DBXPlatform {$ENDIF} {$IFDEF VER300}, System.JSON {$ENDIF};
 
 type
+  TJsonSetting = class
+  private
+    FTableName: string;
+    FPostStatement: string;
+    FPostToServer: boolean;
+    FNomePlural: string;
+    procedure SetPostStatement(const Value: string);
+    procedure SetPostToServer(const Value: boolean);
+    procedure SetTableName(const Value: string);
+    procedure SetNomePlural(const Value: string);
+  public
+    property TableName: string read FTableName write SetTableName;
+    property NomePlural: string read FNomePlural write SetNomePlural;
+    property PostToServer: boolean read FPostToServer write SetPostToServer;
+    property PostStatement: string read FPostStatement write SetPostStatement;
+  end;
+
+  TJsonDictionary = class(TDictionary<String, TJsonSetting>)
+  public
+    destructor Destroy; override;
+  end;
+
   TStringDictionary = class(TDictionary<String, String>)
   end;
 
@@ -111,6 +133,7 @@ type
     FCustomParams: ICustomParams;
     FstopOnPostRecordError: boolean;
     FStopOnGetRecordError : boolean;
+    FStatementForPost: string;
     procedure addTabelaDetalheParams(valorPK: integer;
       params: TStringList;
       tabelaDetalhe: TTabelaDetalhe);
@@ -130,7 +153,7 @@ type
   protected
     FFieldList : TFieldDictionaryList;
     FDataLog: ILog;
-    FTranslateTableNames: TStringDictionary;
+    FTranslateTableNames: TJsonDictionary;
     FnomeTabela: string;
     FnomeSingular: string;
     FNomePlural: string;
@@ -141,7 +164,7 @@ type
     duasVias: boolean;
     useMultipartParams: boolean;
     clientToServer: boolean;
-    encodeJsonValues : boolean;
+    FEncodeJsonValues : boolean;
     tabelasDependentes: TTabelaDependenteList;
     tabelasDetalhe: TTabelaDetalheList;
     offset: integer;
@@ -223,7 +246,7 @@ type
     procedure SetQueryParameters(qry: TSQLDataSet; DMLOperation: TDMLOperation; node: IXMLDomNode; ChildrenNodes: TXMLNodeDictionary;
       Integrador: TDataIntegradorModuloWeb); virtual;
     function GetDefaultValueForSalvouRetaguarda: Char; virtual;
-    function getSQLStatementForPost: string; virtual;
+    function getDefaultSQLStatementForPost: string; virtual;
   public
     translations: TTranslationSet;
     verbose: boolean;
@@ -246,13 +269,15 @@ type
     destructor Destroy; override;
     function getNomeTabela: string; virtual;
     procedure setNomeTabela(const Value: string); virtual;
-    procedure SetTranslateTableNames(aTranslateTableNames: TStringDictionary);
+    procedure SetTranslateTableNames(aTranslateTableNames: TJsonDictionary);
     property nomeTabela: string read GetNomeTabela write setNomeTabela;
     property NomeSingular: string read getNomeSingular write SetNomeSingular;
     property nomePlural: string read GetNomePlural write setNomePlural;
     property nomePKLocal: string read GetNomePKLocal write setNomePKLocal;
     function getFieldDictionaryList: TFieldDictionaryList;
     function getTabelasDetalhe: TTabelaDetalheList;
+    property EncodeJsonValues: boolean read FEncodeJsonValues write FEncodeJsonValues;
+    procedure SetStatementForPost(const aStatement: string);
   end;
 
   TDataIntegradorModuloWebClass = class of TDataIntegradorModuloWeb;
@@ -1508,10 +1533,18 @@ begin
   end;
 end;
 
-function TDataIntegradorModuloWeb.getSQLStatementForPost: string;
+function TDataIntegradorModuloWeb.getDefaultSQLStatementForPost: string;
 begin
-  Result := 'SELECT * from ' + Self.nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
-        + getAdditionalSaveConditions;
+  if Self.FStatementForPost <> EmptyStr then
+    Result := Self.FStatementForPost
+  else
+    Result := 'SELECT * from ' + Self.nomeTabela + ' where ((salvouRetaguarda = ' + QuotedStr('N') + ') or (salvouRetaguarda is null)) '
+          + getAdditionalSaveConditions;
+end;
+
+procedure TDataIntegradorModuloWeb.SetStatementForPost(const aStatement: string);
+begin
+  FStatementForPost:= aStatement;
 end;
 
 procedure TDataIntegradorModuloWeb.postRecordsToRemote(http: TidHTTP = nil);
@@ -1526,7 +1559,7 @@ begin
   try
     try
       Self.log('Selecionando registros para sincronização. Classe: ' + ClassName, 'Sync');
-      qry.commandText := Self.getSQLStatementForPost;
+      qry.commandText := Self.getDefaultSQLStatementForPost;
 
       {$IFDEF HibridoClientDLL}
       SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14 OR 4); //FOREGROUND_RED);
@@ -1704,6 +1737,7 @@ begin
   translations.add('id', 'idremoto');
   tabelasDetalhe := TTabelaDetalheList.Create(True);
   tabelasDependentes := TTabelaDependenteList.Create(True);
+  Self.FStatementForPost := EmptyStr;
 end;
 
 
@@ -1881,7 +1915,7 @@ begin
   FthreadControl := Value;
 end;
 
-procedure TDataIntegradorModuloWeb.SetTranslateTableNames(aTranslateTableNames: TStringDictionary);
+procedure TDataIntegradorModuloWeb.SetTranslateTableNames(aTranslateTableNames: TJsonDictionary);
 begin
   Self.FTranslateTableNames := aTranslateTableNames;
 end;
@@ -2128,6 +2162,39 @@ begin
       Json.Free;
   end;
   Self.Clear;
+  inherited;
+end;
+
+{ TJsonSetting }
+
+procedure TJsonSetting.SetNomePlural(const Value: string);
+begin
+  FNomePlural := Value;
+end;
+
+procedure TJsonSetting.SetPostStatement(const Value: string);
+begin
+  FPostStatement := Value;
+end;
+
+procedure TJsonSetting.SetPostToServer(const Value: boolean);
+begin
+  FPostToServer := Value;
+end;
+
+procedure TJsonSetting.SetTableName(const Value: string);
+begin
+  FTableName := Value;
+end;
+
+{ TJsonDictionary }
+
+destructor TJsonDictionary.Destroy;
+var
+  Pair: TPair<String, TJsonSetting>;
+begin
+  for Pair in Self do
+    Pair.Value.Free;
   inherited;
 end;
 

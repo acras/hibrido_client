@@ -25,6 +25,7 @@ type
 
   ICustomParams = interface
     function getCustomParams: TCustomParams;
+    function getJsonFromServer(var aRestrictPosters: boolean): string;
   end;
 
 implementation
