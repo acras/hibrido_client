@@ -211,7 +211,7 @@ type
     function getdmPrincipal: IDataPrincipal; virtual;
     function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
     function DataSetToArray(aDs: TDataSet): TStringDictionary; virtual;
-    procedure BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean); virtual;
+    procedure BeforeUpdateInsertRecord(const aTableName: String; node: IXMLDomNode; const id: integer; var handled: boolean); virtual;
     procedure ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb); virtual;
     function getTranslatedTable(const aServerName: string): TDataIntegradorModuloWeb; virtual;
     function getNomeSingular: string; virtual;
@@ -492,7 +492,7 @@ begin
   Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node, Self);
 end;
 
-procedure TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean);
+procedure TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(const aTableName: String; node: IXMLDomNode; const id: integer; var handled: boolean);
 begin
   handled := False;
 end;
@@ -691,7 +691,7 @@ begin
             if nodeItem.selectSingleNode('./id') <> nil then
               ChildId := StrToIntDef(nodeItem.selectSingleNode('./id').text, 0);
             handled := False;
-            Self.BeforeUpdateInsertRecord(nodeItem, ChildId, handled);
+            Self.BeforeUpdateInsertRecord(Detail.FnomeTabela, nodeItem, ChildId, handled);
             if not handled then
               Self.ExecInsertRecord(nodeItem, ChildId, Detail);
           end;
@@ -710,7 +710,7 @@ var
   handled : boolean;
 begin
   handled := False;
-  Self.BeforeUpdateInsertRecord(node, id, handled);
+  Self.BeforeUpdateInsertRecord(Self.FNomeTabela, node, id, handled);
   if not handled then
     Self.ExecInsertRecord(node, id, Self);
 end;
