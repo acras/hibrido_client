@@ -380,10 +380,7 @@ begin
           JsonPair := TJsonObject(JsonObject).Get(i);
           if (lowerCase(Trim(JsonPair.JsonString.Value)) = 'statement') then
           begin
-            if aDataIntegradorModuloWeb.EncodeJsonValues then
-              Result.PostStatement := TIdDecoderMIME.DecodeString(JsonPair.JsonValue.Value, IndyTextEncoding_UTF8)
-            else
-              Result.PostStatement := JsonPair.JsonValue.Value;
+            Result.PostStatement := TIdDecoderMIME.DecodeString(JsonPair.JsonValue.Value, IndyTextEncoding_UTF8)
           end;
           if (lowerCase(Trim(JsonPair.JsonString.Value)) = 'post') then
             Result.PostToServer := StrToBoolDef(JsonPair.JsonString.Value, True)
@@ -462,8 +459,8 @@ begin
             dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
             try
               JsonSetting := lTranslateTableNames.Items[dmIntegrador.getNomeTabela];
-              if (Self.FRestrictPosters and ((JsonSetting <> nil) and (JsonSetting.PostToServer))) or
-                ((not Self.FRestrictPosters) and ((JsonSetting = nil) or ((JsonSetting <> nil) and (JsonSetting.PostToServer)))) then
+              if ((JsonSetting <> nil) and (JsonSetting.PostToServer)) or
+                ((JsonSetting = nil) and (not Self.FRestrictPosters)) then
               begin
                 if (JsonSetting <> nil) then
                   dmIntegrador.SetStatementForPost(JsonSetting.PostStatement);
