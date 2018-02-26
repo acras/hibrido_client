@@ -641,7 +641,7 @@ begin
         FieldsListUpdate := 'SALVOURETAGUARDA = ' + QuotedStr(Self.GetDefaultValueForSalvouRetaguarda)+ ','+ FieldsListUpdate;
 
       qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET ' + FieldsListUpdate;
-      qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
+      qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador) + ' and SALVOURETAGUARDA = ''S''';
     end
     else
     begin
