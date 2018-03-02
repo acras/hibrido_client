@@ -5,7 +5,10 @@ interface
 Uses System.Generics.Collections;
 
 type
-  TCustomParams = TDictionary<string, string>;
+  TCustomParams = class(TDictionary<string, string>)
+  public
+    function getDefaultParams: string; virtual; abstract;
+  end;
 
   ISincronizacaoNotifier = interface
     procedure flagSalvandoDadosServidor;
