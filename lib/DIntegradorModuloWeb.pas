@@ -234,7 +234,7 @@ type
     function getdmPrincipal: IDataPrincipal; virtual;
     function JsonObjectHasPair(const aName: string; aJson: TJSONObject): boolean;
     function DataSetToArray(aDs: TDataSet): TStringDictionary; virtual;
-    procedure BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean); virtual;
+    procedure BeforeUpdateInsertRecord(const aTableName: String; node: IXMLDomNode; const id: integer; var handled: boolean); virtual;
     procedure ExecInsertRecord(node: IXMLDomNode; const id: integer; Integrador: TDataIntegradorModuloWeb); virtual;
     function getTranslatedTable(const aServerName: string): TDataIntegradorModuloWeb; virtual;
     function getNomeSingular: string; virtual;
@@ -518,7 +518,7 @@ begin
   Result := 'INSERT INTO ' + nomeTabela + getFieldList(node) + ' values ' + getFieldValues(node, Self);
 end;
 
-procedure TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(node: IXMLDomNode; const id: integer; var handled: boolean);
+procedure TDataIntegradorModuloWeb.BeforeUpdateInsertRecord(const aTableName: String; node: IXMLDomNode; const id: integer; var handled: boolean);
 begin
   handled := False;
 end;
@@ -667,7 +667,7 @@ begin
         FieldsListUpdate := 'SALVOURETAGUARDA = ' + QuotedStr(Self.GetDefaultValueForSalvouRetaguarda)+ ','+ FieldsListUpdate;
 
       qry.CommandText := 'UPDATE ' + Integrador.nomeTabela + ' SET ' + FieldsListUpdate;
-      qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador);
+      qry.CommandText := qry.CommandText + CheckQryCommandTextForDuasVias(Id, Integrador) + ' and SALVOURETAGUARDA = ''S''';
     end
     else
     begin
@@ -717,7 +717,7 @@ begin
             if nodeItem.selectSingleNode('./id') <> nil then
               ChildId := StrToIntDef(nodeItem.selectSingleNode('./id').text, 0);
             handled := False;
-            Self.BeforeUpdateInsertRecord(nodeItem, ChildId, handled);
+            Self.BeforeUpdateInsertRecord(Detail.FnomeTabela, nodeItem, ChildId, handled);
             if not handled then
               Self.ExecInsertRecord(nodeItem, ChildId, Detail);
           end;
@@ -736,7 +736,7 @@ var
   handled : boolean;
 begin
   handled := False;
-  Self.BeforeUpdateInsertRecord(node, id, handled);
+  Self.BeforeUpdateInsertRecord(Self.FNomeTabela, node, id, handled);
   if not handled then
     Self.ExecInsertRecord(node, id, Self);
 end;
@@ -1130,6 +1130,8 @@ begin
   for I := 0 to aDs.FieldCount - 1 do
   begin
     nome := aDs.Fields[i].FieldName;
+    if UpperCase(nome) = 'VERSION_ID' then
+      continue;
     try
       if VarIsNull(aDs.Fields[i].AsVariant) then
         fieldValue := ''
