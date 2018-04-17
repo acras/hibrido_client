@@ -74,6 +74,8 @@ type
   end;
 
   TRunnerThreadPuters = class(TCustomRunnerThread)
+  private
+    procedure PopulateTranslatedTableNames(aTranslatedTableName: TStringDictionary);
   protected
     procedure setMainFormPuttingTrue;
     procedure finishPuttingProcess;
@@ -129,6 +131,7 @@ var
   dm: IDataPrincipal;
   http: TidHTTP;
   dimw: TDataIntegradorModuloWeb;
+  dimwName: string;
 begin
   CoInitializeEx(nil, 0);
   try
@@ -150,6 +153,7 @@ begin
 
             dimw := block[j].Create(nil);
             try
+              dimwName := dimw.getHumanReadableName;
               dimw.notifier := Self.Fnotifier;
               dimw.dmPrincipal := dm;
               dimw.threadcontrol := Self.FThreadControl;
@@ -163,12 +167,21 @@ begin
           end;
           dm.commit;
         except
-          dm.rollback;
+          on E: Exception do
+          begin
+            dm.rollback;
+            if assigned (self.FDataLog) then
+            begin
+              SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_RED or FOREGROUND_INTENSITY);
+              Self.FDataLog.log(Format('Erro em GetUpdateData para a classe "%s":'+#13#10+'%s', [dimwName,e.Message]));
+              SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+            end;
+          end;
         end;
       end;
     finally
       dm := nil;
-      http := nil;
+      FreeAndNil(http);
     end;
   finally
     CoUninitialize;
@@ -301,12 +314,37 @@ begin
     FNotifier.flagSalvandoDadosServidor;
 end;
 
+procedure TRunnerThreadPuters.PopulateTranslatedTableNames(aTranslatedTableName: TStringDictionary);
+var
+  i, j: integer;
+  dmIntegrador: TDataIntegradorModuloWeb;
+
+begin
+  for i := 0 to length(sincronizador.posterDataModules)-1 do
+  begin
+    if not Self.ShouldContinue then
+      Break;
+    dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
+    try
+      if (dmIntegrador.getNomeTabela <> EmptyStr) and (dmIntegrador.NomeSingular <> EmptyStr) then
+        if not aTranslatedTableName.ContainsKey(dmIntegrador.getNomeTabela) then
+          aTranslatedTableName.Add(LowerCase(Trim(dmIntegrador.getNomeTabela)), LowerCase(Trim(dmIntegrador.NomeSingular)));
+      for j := 0 to dmIntegrador.getTabelasDetalhe.Count -1 do
+        if not aTranslatedTableName.ContainsKey(dmIntegrador.getTabelasDetalhe[j].getNomeTabela) then
+          aTranslatedTableName.Add(LowerCase(Trim(dmIntegrador.getTabelasDetalhe[j].getNomeTabela)), LowerCase(Trim(dmIntegrador.getTabelasDetalhe[j].NomeSingular)));
+    finally
+      FreeAndNil(dmIntegrador);
+    end;
+  end;
+end;
+
 procedure TRunnerThreadPuters.Execute;
 var
   i: integer;
   dm: IDataPrincipal;
   dmIntegrador: TDataIntegradorModuloWeb;
   http: TIdHTTP;
+  lTranslateTableNames: TStringDictionary;
 begin
   inherited;
   if salvandoRetaguarda or gravandoVenda then exit;
@@ -322,12 +360,16 @@ begin
       try
         try
           http := getHTTPInstance;
+          lTranslateTableNames := TStringDictionary.Create;
+          Self.PopulateTranslatedTableNames(lTranslateTableNames);
+
           for i := 0 to length(sincronizador.posterDataModules)-1 do
           begin
             if not Self.ShouldContinue then
               Break;
             dmIntegrador := sincronizador.posterDataModules[i].Create(nil);
             try
+              dmIntegrador.SetTranslateTableNames(lTranslateTableNames);
               dmIntegrador.notifier := FNotifier;
               dmIntegrador.threadControl := Self.FthreadControl;
               dmIntegrador.CustomParams := Self.FCustomParams;
@@ -348,6 +390,7 @@ begin
         dm := nil;
         if http <> nil then
           FreeAndNil(http);
+        FreeAndNil(lTranslateTableNames);
       end;
     finally
       CoUninitialize;
